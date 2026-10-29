@@ -74,6 +74,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         applyConfigExtras(intent)
+        BootReceiver.enableWirelessAdb(this)
 
         root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         web = WebView(this)

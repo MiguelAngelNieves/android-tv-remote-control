@@ -7,6 +7,7 @@ const http = require('http');
 const path = require('path');
 const express = require('express');
 const { WebSocketServer } = require('ws');
+const tvAdb = require('./adb');
 
 const PORT = Number(process.env.PORT) || 8080;
 const TOKEN = process.env.TOKEN || '';
@@ -72,7 +73,18 @@ app.post('/api/cmd', auth, (req, res) => {
   res.json({ ok: sendTv(msg) });
 });
 app.get('/api/state', auth, (req, res) => res.json({ tv: !!tv, state: lastState }));
-app.get('/api/library', auth, (req, res) => res.json(db.library));
+// ---- TV completa (ADB) ----
+app.get('/api/tv/screen', auth, async (req, res) => {
+  const shot = await tvAdb.screenshot();
+  if (!shot) return res.status(503).json({ error: 'adb_offline' });
+  res.set('Cache-Control', 'no-store').type(shot.type).send(shot.data);
+});
+app.post('/api/tv/key', auth, (req, res) => res.json({ ok: tvAdb.key(String(req.body && req.body.key)) }));
+app.post('/api/tv/power', auth, async (req, res) => res.json({ ok: await tvAdb.power(String((req.body && req.body.mode) || 'toggle')) }));
+app.post('/api/tv/app', auth, (req, res) => res.json({ ok: tvAdb.launch(String(req.body && req.body.pkg)) }));
+app.get('/api/tv/info', auth, (req, res) => res.json({ info: tvAdb.info, apps: tvAdb.apps }));
+
+app.get('/api/library', auth,(req, res) => res.json(db.library));
 app.post('/api/library', auth, (req, res) => {
   const url = normalizeUrl(req.body && req.body.url);
   if (!url) return res.status(400).json({ error: 'url requerida' });
@@ -124,7 +136,8 @@ wss.on('connection', (ws) => {
   }
 
   ctls.add(ws);
-  sendJson(ws, { type: 'hello', tv: !!tv, state: lastState, library: db.library });
+  tvAdb.active = true;
+  sendJson(ws, { type: 'hello', tv: !!tv, state: lastState, library: db.library, tvinfo: tvAdb.info, apps: tvAdb.apps });
   ws.on('message', (raw) => {
     let m; try { m = JSON.parse(raw); } catch { return; }
     switch (m.type) {
@@ -140,14 +153,24 @@ wss.on('connection', (ws) => {
       case 'lib:del':
         db.library = db.library.filter((i) => i.id !== m.id);
         save(); return broadcast({ type: 'library', items: db.library });
+      // --- TV completa por ADB ---
+      case 'tv:key': if (!tvAdb.key(String(m.key))) sendJson(ws, { type: 'error', error: 'adb_offline' }); return;
+      case 'tv:text': if (!tvAdb.text(m.text)) sendJson(ws, { type: 'error', error: 'adb_offline' }); return;
+      case 'tv:app': if (!tvAdb.launch(String(m.pkg))) sendJson(ws, { type: 'error', error: 'adb_offline' }); return;
+      case 'tv:power': tvAdb.power(String(m.mode || 'toggle')); return;
+      case 'tv:apps': tvAdb.loadApps(); return;
       default:
         if (!FORWARD.has(m.type)) return;
         if (m.type === 'open') m.url = normalizeUrl(m.url);
         if (!sendTv(m)) sendJson(ws, { type: 'error', error: 'tv_offline' });
     }
   });
-  ws.on('close', () => { ctls.delete(ws); watchers.delete(ws); updateWatch(); });
+  ws.on('close', () => { ctls.delete(ws); watchers.delete(ws); updateWatch(); tvAdb.active = ctls.size > 0; });
 });
+
+tvAdb.on('info', (info) => broadcast({ type: 'tvinfo', info }));
+tvAdb.on('apps', (apps) => broadcast({ type: 'apps', apps }));
+tvAdb.start();
 
 setInterval(() => {
   wss.clients.forEach((ws) => {

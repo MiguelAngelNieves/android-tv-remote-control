@@ -54,6 +54,24 @@ Abrir URL, atrás/adelante/recargar/inicio, cursor + clic + scroll, teclado (tex
 - **Pantalla completa al reproducir**, **modo escritorio** y **tamaño del cursor** se guardan en la TV.
 - La velocidad del cursor se guarda en el celular.
 
+## TV completa (v2.1) — controlar cualquier app por ADB
+El servidor controla todo el Chromecast (Netflix, YouTube, ajustes…): cruceta, OK, atrás, inicio, volumen, encender/apagar, abrir apps, escribir y ver la pantalla.
+
+Arrancar el servidor con ADB (Windows / PowerShell):
+```
+$env:TOKEN='TU_CLAVE'
+$env:ADB_PATH='D:\dev\Android\Sdk\platform-tools\adb.exe'
+$env:TV_IP='192.168.1.66'
+node server.js
+```
+El servidor encuentra solo el puerto de la TV (mDNS) y se reconecta si cambia.
+
+Una sola vez, para que la TV reactive la depuración inalámbrica al reiniciarse:
+```
+adb -s IP:PUERTO shell pm grant com.miguel.tvremote android.permission.WRITE_SECURE_SETTINGS
+```
+Opcional (capturas más livianas): `npm install` instala `sharp` si está disponible.
+
 ## Versiones
 Repositorio git con etiquetas (`git tag`). Volver a una versión: `git checkout v1.0`; regresar: `git checkout main`.
 

@@ -27,6 +27,7 @@
   main{flex:1;min-height:0;position:relative}
   .tab{position:absolute;inset:0;overflow-y:auto;padding:20px 16px 12px;display:none;flex-direction:column;gap:12px}
   .tab.a{display:flex}
+  .tab>*{flex-shrink:0}
 
   /* ---------- navegación inferior ---------- */
   nav{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px 16px 14px}
@@ -151,6 +152,25 @@
   .btn-main{height:54px;border:0;border-radius:14px;background:var(--ink);color:var(--card);font-size:17px;font-weight:600}
   .btn-main:disabled{opacity:.6}
 
+  /* ---------- modo TV completa ---------- */
+  body:not(.tvmode) .tvonly{display:none!important}
+  body.tvmode .webonly{display:none!important}
+  .modes{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--inset);border-radius:12px;padding:3px;box-shadow:inset 0 1px 2px rgba(0,0,0,.1)}
+  .modes button{height:38px;border:0;border-radius:10px;background:transparent;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;color:#4A463F}
+  .modes button.a{background:var(--card);color:var(--ink);box-shadow:0 2px 6px rgba(60,50,40,.15)}
+  .ring .arw{position:absolute;font-size:18px;color:#4A463F;line-height:1}
+  .ring .au{top:12%;left:50%;transform:translateX(-50%)} .ring .ad{bottom:12%;left:50%;transform:translateX(-50%)}
+  .ring .al{left:12%;top:50%;transform:translateY(-50%)} .ring .ar{right:12%;top:50%;transform:translateY(-50%)}
+  .ring .arw.hit,.ring .ok.hit{color:var(--acc)}
+  .ring .ok.hit{box-shadow:0 0 0 4px var(--acc)}
+  .vrow{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .vrow button{height:44px;border:0;border-radius:12px;background:var(--inset);font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.06em}
+  .vrow .pw-btn{background:var(--ink);color:var(--card)}
+  .apps{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+  .apps::-webkit-scrollbar{display:none}
+  .apps button{flex:none;height:44px;padding:0 16px;border:0;border-radius:12px;background:var(--card);box-shadow:0 2px 6px rgba(60,50,40,.10);font-size:14px;font-weight:600;white-space:nowrap}
+  .apps button.cur{background:var(--ink);color:var(--card)}
+
   #toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--lcd);color:var(--lcdtx);font-family:var(--mono);font-size:12px;letter-spacing:.04em;padding:10px 16px;border-radius:12px;display:none;z-index:40;white-space:nowrap}
 </style>
 </head>
@@ -159,19 +179,33 @@
 <main>
   <!-- ================= MANDO ================= -->
   <section id="t-remote" class="tab a">
-    <div class="lcd">
-      <div class="lcd-top"><span>TV</span><span id="stTxt">● CONECTANDO…</span></div>
-      <div id="lcdTitle">—</div>
-      <div class="lcd-prog"><span id="lPos">0:00</span><div class="bar"><i id="lBar"></i></div><span id="lDur">0:00</span></div>
+    <div class="modes" role="tablist" aria-label="Modo de control">
+      <button data-mode="web" class="a">NAVEGADOR</button>
+      <button data-mode="tv">TV COMPLETA</button>
     </div>
-    <form id="urlForm" class="url" autocomplete="off">
+    <div class="lcd">
+      <div class="lcd-top"><span id="lcdLbl">NAVEGADOR</span><span id="stTxt">● CONECTANDO…</span></div>
+      <div id="lcdTitle">—</div>
+      <div class="lcd-prog webonly"><span id="lPos">0:00</span><div class="bar"><i id="lBar"></i></div><span id="lDur">0:00</span></div>
+    </div>
+    <div class="apps tvonly" id="apps" aria-label="Apps de la TV"></div>
+    <form id="urlForm" class="url webonly" autocomplete="off">
       <span>URL</span>
       <input id="url" placeholder="pega un enlace o busca…" inputmode="url" autocapitalize="off" aria-label="Enlace o búsqueda">
       <button class="btn-dark" type="submit">ENVIAR</button>
     </form>
     <div class="panel">
       <div id="pad" aria-label="Trackpad">
-        <div class="ring"><span class="lbl t">TRACKPAD</span><div class="ok">OK</div><span class="lbl b">2 DEDOS · SCROLL</span></div>
+        <div class="ring" id="ring">
+          <span class="lbl t webonly">TRACKPAD</span><span class="lbl b webonly">2 DEDOS · SCROLL</span>
+          <span class="arw au tvonly" data-a="up">▲</span><span class="arw ad tvonly" data-a="down">▼</span>
+          <span class="arw al tvonly" data-a="left">◀</span><span class="arw ar tvonly" data-a="right">▶</span>
+          <div class="ok" id="okBtn">OK</div>
+        </div>
+      </div>
+      <div class="vrow tvonly">
+        <button data-tvkey="voldown">VOL −</button><button data-tvkey="mute">MUTE</button><button data-tvkey="volup">VOL +</button>
+        <button class="pw-btn" id="powerBtn">⏻</button>
       </div>
       <div class="keys">
         <button class="key" data-nav="back">ATRÁS</button>
@@ -184,23 +218,24 @@
 
   <!-- ================= VIDEO ================= -->
   <section id="t-video" class="tab">
-    <div class="vhead"><span id="vState">● SIN VIDEO</span><span id="vRate">1×</span></div>
+    <div class="vhead"><span id="vState">● SIN VIDEO</span><span id="vRate" class="webonly">1×</span></div>
     <div class="shot" id="shot">
       <img id="frame" alt="Pantalla de la TV">
       <div class="empty" id="shotEmpty">CARGANDO IMAGEN…</div>
-      <span class="hint">TOCA LA IMAGEN PARA HACER CLIC</span>
+      <span class="hint webonly">TOCA LA IMAGEN PARA HACER CLIC</span>
+      <span class="hint tvonly">PANTALLA DE LA TV · NETFLIX/DISNEY+ SALEN EN NEGRO</span>
     </div>
     <div>
-      <div id="tc">0:00<small>/ 0:00</small></div>
+      <div id="tc" class="webonly">0:00<small>/ 0:00</small></div>
       <div id="vTitle">—</div>
     </div>
-    <div class="ticks" id="ticks"><input id="seek" type="range" min="0" max="1" value="0" step="1" aria-label="Posición del video"></div>
+    <div class="ticks webonly" id="ticks"><input id="seek" type="range" min="0" max="1" value="0" step="1" aria-label="Posición del video"></div>
     <div class="ctrl">
       <button class="round" data-seek="-10" aria-label="Retroceder 10 segundos">−10</button>
       <button class="big-play" data-pp aria-label="Reproducir o pausar"><svg viewBox="0 0 24 24" class="ppIcon"><path d="M8 5l12 7-12 7z"/></svg></button>
       <button class="round" data-seek="10" aria-label="Adelantar 10 segundos">+10</button>
     </div>
-    <div class="seg" id="speeds">
+    <div class="seg webonly" id="speeds">
       <button data-speed="1" class="a">1×</button><button data-speed="1.25">1.25×</button><button data-speed="1.5">1.5×</button><button data-speed="2">2×</button><button id="fsBtn">FULL</button>
     </div>
     <div id="gest" aria-label="Zona de gestos">
@@ -294,6 +329,16 @@ const store = {
 let token = store.get('tok', '');
 let ws = null, opened = false, tab = 't-remote', pending = null, lib = [], state = {}, tvOnline = false, seeking = false, wasPlaying = false;
 let speedMul = Number(store.get('speed', '1')) || 1;
+let mode = store.get('mode', 'web'), tvinfo = { adb: false }, apps = [];
+const TV = () => mode === 'tv';
+// Acciones que cambian según el modo (navegador propio vs TV completa por ADB)
+const act = {
+  pp: () => TV() ? send({ type: 'tv:key', key: 'playpause' }) : send({ type: 'media', action: 'toggle' }),
+  seek: (s) => TV() ? send({ type: 'tv:key', key: s > 0 ? 'ff' : 'rew' }) : send({ type: 'media', action: 'seek', value: s }),
+  vol: (dir) => TV() ? send({ type: 'tv:key', key: dir === 'up' ? 'volup' : 'voldown' }) : send({ type: 'volume', dir }),
+  mute: () => TV() ? send({ type: 'tv:key', key: 'mute' }) : send({ type: 'media', action: 'mute' }),
+  nav: (a) => TV() ? send({ type: 'tv:key', key: a === 'back' ? 'back' : 'home' }) : send({ type: 'nav', action: a })
+};
 
 const PLAY = '<path d="M8 5l12 7-12 7z"/>';
 const PAUSE = '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>';
@@ -344,10 +389,13 @@ function connect() {
   if (!token) return showLogin();
   opened = false; setStatus('wait');
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?role=ctl&token=${encodeURIComponent(token)}`);
-  ws.onopen = () => { opened = true; if (tab === 't-video') send({ type: 'watch', on: true }); };
+  ws.onopen = () => { opened = true; if (tab === 't-video' && !TV()) send({ type: 'watch', on: true }); };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
-    if (m.type === 'hello') { tvOnline = m.tv; state = m.state || {}; lib = m.library || []; renderLib(); renderState(); flush(); }
+    if (m.type === 'hello') { tvOnline = m.tv; state = m.state || {}; lib = m.library || []; tvinfo = m.tvinfo || tvinfo; apps = m.apps || []; renderLib(); renderApps(); renderState(); flush(); }
+    else if (m.type === 'tvinfo') { tvinfo = m.info; renderState(); renderApps(); }
+    else if (m.type === 'apps') { apps = m.apps; renderApps(); }
+    else if (m.type === 'error' && m.error === 'adb_offline') toast('SIN CONEXIÓN ADB CON LA TV');
     else if (m.type === 'tv') { tvOnline = m.online; if (!m.online) state = {}; renderState(); flush(); }
     else if (m.type === 'state') { tvOnline = true; state = m; renderState(); }
     else if (m.type === 'frame') { $('#frame').src = 'data:image/jpeg;base64,' + m.data; $('#shotEmpty').style.display = 'none'; }
@@ -377,10 +425,10 @@ function go(id) {
   const dark = id === 't-video';
   document.body.classList.toggle('dark', dark);
   document.querySelector('meta[name=theme-color]').content = dark ? '#161616' : '#E7E3DC';
-  send({ type: 'watch', on: dark });
+  send({ type: 'watch', on: dark && !TV() });
 }
 $$('nav button').forEach((b) => b.onclick = () => go(b.dataset.tab));
-document.addEventListener('visibilitychange', () => send({ type: 'watch', on: !document.hidden && tab === 't-video' }));
+document.addEventListener('visibilitychange', () => send({ type: 'watch', on: !document.hidden && tab === 't-video' && !TV() }));
 
 // ---------- Abrir enlace ----------
 const openUrl = (u) => { u = (u || '').trim(); if (!u) return; send({ type: 'open', url: u }); toast('ENVIADO A LA TV'); };
@@ -395,38 +443,62 @@ $('#urlForm').addEventListener('submit', (e) => { e.preventDefault(); openUrl($(
     if (ax || ay) { send({ type: 'move', dx: ax, dy: ay }); ax = ay = 0; }
     if (sy) { send({ type: 'scroll', dy: sy }); sy = 0; }
   }, 30);
-  pad.addEventListener('touchstart', (e) => { e.preventDefault(); if (!last) { t0 = Date.now(); moved = 0; maxF = 0; } maxF = Math.max(maxF, e.touches.length); last = pt(e); pad.classList.add('press'); }, { passive: false });
+  // Modo TV: deslizar = flechas (una por cada tramo recorrido), toque = flecha según la zona del anillo u OK al centro
+  let accX = 0, accY = 0, start = null;
+  const STEP = 46;
+  const flash = (sel) => { const el = $(sel); if (!el) return; el.classList.add('hit'); setTimeout(() => el.classList.remove('hit'), 140); };
+  const tvKey = (k) => { send({ type: 'tv:key', key: k }); flash(k === 'ok' ? '#okBtn' : `.arw[data-a=${k}]`); if (navigator.vibrate) navigator.vibrate(6); };
+  pad.addEventListener('touchstart', (e) => {
+    e.preventDefault(); if (!last) { t0 = Date.now(); moved = 0; maxF = 0; accX = accY = 0; start = pt(e); }
+    maxF = Math.max(maxF, e.touches.length); last = pt(e); pad.classList.add('press');
+  }, { passive: false });
   pad.addEventListener('touchmove', (e) => {
     e.preventDefault(); const p = pt(e), dx = p.x - last.x, dy = p.y - last.y; last = p; moved += Math.abs(dx) + Math.abs(dy);
+    if (TV()) {
+      accX += dx; accY += dy;
+      while (Math.abs(accX) >= STEP && Math.abs(accX) > Math.abs(accY)) { tvKey(accX > 0 ? 'right' : 'left'); accX -= Math.sign(accX) * STEP; accY = 0; }
+      while (Math.abs(accY) >= STEP && Math.abs(accY) >= Math.abs(accX)) { tvKey(accY > 0 ? 'down' : 'up'); accY -= Math.sign(accY) * STEP; accX = 0; }
+      return;
+    }
     if (e.touches.length >= 2) sy += -dy * 3; else { ax += dx * 2.4 * speedMul; ay += dy * 2.4 * speedMul; }
   }, { passive: false });
   pad.addEventListener('touchend', (e) => {
     e.preventDefault();
     if (e.touches.length) { last = pt(e); return; }
     pad.classList.remove('press');
-    if (moved < 12 && Date.now() - t0 < 350 && maxF === 1) { send({ type: 'click' }); if (navigator.vibrate) navigator.vibrate(8); }
+    const tap = moved < 12 && Date.now() - t0 < 350 && maxF === 1;
+    if (tap && TV()) {
+      const r = $('#ring').getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const dx = start.x - cx, dy = start.y - cy, d = Math.hypot(dx, dy), okR = r.width * 0.2;
+      if (d <= okR || d > r.width * 0.62) tvKey('ok');
+      else tvKey(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+    } else if (tap) { send({ type: 'click' }); if (navigator.vibrate) navigator.vibrate(8); }
     last = null;
   }, { passive: false });
 })();
 
 // ---------- Botones ----------
-$$('[data-nav]').forEach((b) => b.onclick = () => send({ type: 'nav', action: b.dataset.nav }));
-$$('[data-pp]').forEach((b) => b.onclick = () => send({ type: 'media', action: 'toggle' }));
-$$('[data-seek]').forEach((b) => b.onclick = () => send({ type: 'media', action: 'seek', value: Number(b.dataset.seek) }));
+$$('[data-nav]').forEach((b) => b.onclick = () => act.nav(b.dataset.nav));
+$$('[data-pp]').forEach((b) => b.onclick = () => act.pp());
+$$('[data-seek]').forEach((b) => b.onclick = () => act.seek(Number(b.dataset.seek)));
 $$('[data-speed]').forEach((b) => b.onclick = () => send({ type: 'media', action: 'speed', value: Number(b.dataset.speed) }));
-$$('[data-vol]').forEach((b) => b.onclick = () => send({ type: 'volume', dir: b.dataset.vol }));
-$$('[data-key]').forEach((b) => b.onclick = () => send({ type: 'key', key: b.dataset.key }));
-$('#muteBtn').onclick = () => send({ type: 'media', action: 'mute' });
+$$('[data-vol]').forEach((b) => b.onclick = () => act.vol(b.dataset.vol));
+$$('[data-tvkey]').forEach((b) => b.onclick = () => send({ type: 'tv:key', key: b.dataset.tvkey }));
+const TVKEYMAP = { Enter: 'enter', Backspace: 'del', Escape: 'back', ArrowUp: 'up', ArrowDown: 'down', Tab: 'right' };
+$$('[data-key]').forEach((b) => b.onclick = () => TV() ? send({ type: 'tv:key', key: TVKEYMAP[b.dataset.key] }) : send({ type: 'key', key: b.dataset.key }));
+$('#muteBtn').onclick = () => act.mute();
+$('#powerBtn').onclick = () => { send({ type: 'tv:power', mode: tvinfo.awake ? 'off' : 'on' }); toast(tvinfo.awake ? 'APAGANDO LA TV…' : 'ENCENDIENDO LA TV…'); };
 $('#fsBtn').onclick = () => send({ type: 'media', action: 'fullscreen' });
 
 // Teclado
 $('#kbBtn').onclick = () => { $('#sheet').classList.add('on'); $('#kbText').focus(); };
 $('#kbClose').onclick = () => $('#sheet').classList.remove('on');
 $('#sheet').addEventListener('click', (e) => { if (e.target.id === 'sheet') $('#sheet').classList.remove('on'); });
-$('#kbForm').addEventListener('submit', (e) => { e.preventDefault(); const t = $('#kbText').value; if (t) { send({ type: 'text', text: t }); $('#kbText').value = ''; } });
+$('#kbForm').addEventListener('submit', (e) => { e.preventDefault(); const t = $('#kbText').value; if (t) { send({ type: TV() ? 'tv:text' : 'text', text: t }); $('#kbText').value = ''; } });
 
-// Tocar la imagen en vivo = clic en ese punto de la TV
+// Tocar la imagen en vivo = clic en ese punto de la TV (solo navegador propio)
 $('#frame').addEventListener('click', (e) => {
+  if (TV()) return;
   const r = e.target.getBoundingClientRect(), iw = e.target.naturalWidth, ih = e.target.naturalHeight;
   if (!iw) return;
   const s = Math.min(r.width / iw, r.height / ih), w = iw * s, h = ih * s, ox = (r.width - w) / 2, oy = (r.height - h) / 2;
@@ -464,18 +536,20 @@ function paintTicks(f) { const n = Math.round(f * TICKS); $$('#ticks span').forE
       if (now - lastTap < 300) {
         clearTimeout(tapTimer); lastTap = 0;
         const r = g.getBoundingClientRect(), right = t.clientX > r.left + r.width / 2;
-        send({ type: 'media', action: 'seek', value: right ? 10 : -10 }); show(right ? '+10 S' : '−10 S'); hide();
+        act.seek(right ? 10 : -10); show(right ? '+10 S' : '−10 S'); hide();
       } else {
         lastTap = now;
-        tapTimer = setTimeout(() => { send({ type: 'media', action: 'toggle' }); show(state.paused ? '▶' : '❚❚'); hide(); }, 300);
+        tapTimer = setTimeout(() => { act.pp(); show(TV() ? '⏯' : state.paused ? '▶' : '❚❚'); hide(); }, 300);
       }
       return;
     }
     if (Math.abs(dx) > Math.abs(dy)) {
-      const s = Math.round(dx / 8); if (s) send({ type: 'media', action: 'seek', value: s });
+      const s = Math.round(dx / 8);
+      if (s && TV()) { for (let i = 0; i < Math.min(Math.max(1, Math.round(Math.abs(s) / 10)), 6); i++) act.seek(s); }
+      else if (s) act.seek(s);
     } else {
       const v = Math.round(-dy / 40);
-      for (let i = 0; i < Math.min(Math.abs(v), 10); i++) send({ type: 'volume', dir: v > 0 ? 'up' : 'down' });
+      for (let i = 0; i < Math.min(Math.abs(v), 10); i++) act.vol(v > 0 ? 'up' : 'down');
     }
     if (navigator.vibrate) navigator.vibrate(10);
     hide();
@@ -485,6 +559,8 @@ function paintTicks(f) { const n = Math.round(f * TICKS); $$('#ticks span').forE
 // ---------- Estado de la TV ----------
 function renderState() {
   const s = state || {};
+  if (TV()) { renderTv(); renderSettings(s); return; }
+  $('#lcdLbl').textContent = 'NAVEGADOR';
   if (!ws || ws.readyState !== 1) setStatus('bad'); else setStatus(tvOnline ? 'on' : 'tvoff');
   const playing = !!(s.has && !s.paused);
   const label = s.url ? (s.title || host(s.url)) : (tvOnline ? 'PANTALLA DE INICIO' : '—');
@@ -506,6 +582,9 @@ function renderState() {
   // Modo reproducción: si empieza un video mientras estás en el mando, salta a VIDEO
   if (playing && !wasPlaying && tab === 't-remote') go('t-video');
   wasPlaying = playing;
+  renderSettings(s);
+}
+function renderSettings(s) {
   // Ajustes que reporta la TV
   const st = s.settings;
   if (st) {
@@ -513,6 +592,55 @@ function renderState() {
     if (document.activeElement !== $('#curSize')) { $('#curSize').value = st.cursor; sizeLabel(); }
   }
 }
+
+// ---------- TV completa ----------
+function renderTv() {
+  const i = tvinfo || {}, e = $('#stTxt');
+  $('#lcdLbl').textContent = 'TV COMPLETA';
+  if (!ws || ws.readyState !== 1) { e.className = 'bad'; e.textContent = '● SIN SERVIDOR'; }
+  else if (!i.adb) { e.className = 'bad'; e.textContent = '● SIN ADB'; }
+  else if (i.awake === false) { e.className = ''; e.textContent = '● TV EN REPOSO'; }
+  else { e.className = 'on'; e.textContent = '● TV ENCENDIDA'; }
+  $('#lcdTitle').textContent = !i.adb ? 'Activa la depuración inalámbrica en la TV' : i.awake === false ? '⏻ Toca ⏻ para encender' : '▣ ' + (i.label || 'Inicio');
+  $('#vTitle').textContent = i.label || '—';
+  $('#vState').textContent = i.adb ? '● ' + (i.label || 'TV').toUpperCase() : '● SIN ADB';
+  $('#vState').classList.toggle('on', !!i.adb);
+  $('#powerBtn').textContent = i.awake === false ? '⏻ ON' : '⏻ OFF';
+}
+function renderApps() {
+  const box = $('#apps'); box.innerHTML = '';
+  const pinned = ['com.netflix.ninja', 'com.google.android.youtube.tv', 'com.disney.disneyplus', 'com.miguel.tvremote'];
+  const list = [...apps].sort((a, b) => (pinned.indexOf(b.pkg) > -1) - (pinned.indexOf(a.pkg) > -1));
+  if (!list.length) { box.innerHTML = '<button disabled>Sin apps (¿ADB conectado?)</button>'; return; }
+  list.forEach((a) => {
+    const b = document.createElement('button'); b.textContent = a.label;
+    if (tvinfo && tvinfo.app === a.pkg) b.className = 'cur';
+    b.onclick = () => { send({ type: 'tv:app', pkg: a.pkg }); toast('ABRIENDO ' + a.label.toUpperCase()); };
+    box.appendChild(b);
+  });
+}
+function setMode(m) {
+  mode = m; store.set('mode', m);
+  document.body.classList.toggle('tvmode', m === 'tv');
+  $$('[data-mode]').forEach((b) => b.classList.toggle('a', b.dataset.mode === m));
+  if (m === 'tv') { $('#frame').removeAttribute('src'); $('#shotEmpty').style.display = ''; }
+  renderState(); renderApps();
+  send({ type: 'watch', on: m === 'web' && tab === 't-video' });
+}
+$$('[data-mode]').forEach((b) => b.onclick = () => setMode(b.dataset.mode));
+
+// Captura de pantalla de cualquier app (por ADB) mientras la pestaña Video está abierta
+let shotUrl = null;
+setInterval(async () => {
+  if (!TV() || tab !== 't-video' || document.hidden || !token) return;
+  try {
+    const r = await fetch('/api/tv/screen', { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' });
+    if (!r.ok) { $('#shotEmpty').textContent = 'SIN IMAGEN (ADB)'; $('#shotEmpty').style.display = ''; return; }
+    const u = URL.createObjectURL(await r.blob());
+    $('#frame').src = u; $('#shotEmpty').style.display = 'none';
+    if (shotUrl) URL.revokeObjectURL(shotUrl); shotUrl = u;
+  } catch {}
+}, 2000);
 
 // ---------- Ajustes ----------
 $$('[data-set]').forEach((b) => b.onclick = () => {
@@ -560,6 +688,7 @@ $('#saveCur').onclick = () => {
   if (m) { pending = { type: 'open', url: m[0] }; history.replaceState(null, '', '/'); toast('ENVIANDO A LA TV…'); }
 })();
 
+setMode(mode);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 connect();
 </script>
