@@ -185,6 +185,17 @@ Cada versión tiene su etiqueta en git; `git tag` las lista y `git checkout v2.1
 - v2.1: modo TV completa por ADB.
 - v2.2: pantalla en vivo arriba, pantalla completa horizontal y trackpad fluido.
 
+## Licencia
+
+Este proyecto usa la licencia [PolyForm Noncommercial 1.0.0](LICENSE.md). Puedes usarlo, copiarlo y modificarlo libremente para fines personales, educativos o sin ánimo de lucro, siempre que conserves el aviso de autoría; no está permitido usarlo con fines comerciales sin mi autorización. Si quieres usarlo en algo comercial, escríbeme y lo hablamos.
+
+Si lo usas o te basas en él, menciona el proyecto original:
+
+```
+Android TV Remote Control, por Miguel Ángel Nieves
+https://github.com/MiguelAngelNieves/android-tv-remote-control
+```
+
 ## Lo que sigue
 
 - Mover el servidor a una Raspberry Pi para que esté siempre encendido.
