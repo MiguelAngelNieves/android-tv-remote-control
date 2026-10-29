@@ -141,6 +141,12 @@ node server.js
 
 En el celular, en la pestaña Mando, se cambia de NAVEGADOR a TV COMPLETA.
 
+### 8. Modo fluido (opcional)
+
+En Ajustes está el interruptor **Modo fluido (tiempo real)**. Cuando está activo, la pantalla de la TV se ve como video en vivo, a unos 30 cuadros por segundo, y las teclas llegan al instante; usa el servidor de [scrcpy](https://github.com/Genymobile/scrcpy). La primera vez que se activa, el servidor descarga el archivo oficial de scrcpy desde su página de releases, lo verifica con su firma SHA-256 y lo copia a la TV por ADB; no hay que instalar nada a mano. El video solo corre mientras alguien lo está mirando y se apaga solo a los 20 segundos de dejar de verlo.
+
+Si algo falla, la app vuelve sola a las capturas normales y lo avisa en Ajustes. Después de actualizar, hay que correr `npm install` otra vez en `server/` para instalar el reproductor de video.
+
 ## Uso
 
 **Mando.** Arriba está la pantalla en vivo; tocarla la abre en grande. En modo navegador el trackpad mueve el cursor, un toque hace clic y dos dedos desplazan la página. En modo TV completa el anillo funciona como la superficie táctil de un control moderno: deslizar mueve entre opciones, mantener el dedo desplazado repite como un joystick, y un toque es OK.
@@ -185,10 +191,14 @@ Cada versión tiene su etiqueta en git; `git tag` las lista y `git checkout v2.1
 - v2.0: nueva interfaz, ajustes desde el celular y apertura al encender.
 - v2.1: modo TV completa por ADB.
 - v2.2: pantalla en vivo arriba, pantalla completa horizontal y trackpad fluido.
+- v2.3: el Mando cabe en la pantalla sin scroll.
+- v2.4: modo fluido con video en tiempo real y teclas instantáneas.
 
 ## Licencia
 
 Este proyecto usa la licencia [PolyForm Noncommercial 1.0.0](LICENSE.md). Puedes usarlo, copiarlo y modificarlo libremente para fines personales, educativos o sin ánimo de lucro, siempre que conserves el aviso de autoría; no está permitido usarlo con fines comerciales sin mi autorización. Si quieres usarlo en algo comercial, escríbeme y lo hablamos.
+
+El modo fluido usa el servidor de [scrcpy](https://github.com/Genymobile/scrcpy) (Apache 2.0), que se descarga aparte y no forma parte de este repositorio, y el reproductor [JMuxer](https://github.com/samirkumardas/jmuxer) (MIT).
 
 Si lo usas o te basas en él, menciona el proyecto original:
 

@@ -210,6 +210,12 @@
   .btn-main:disabled{opacity:.6}
   #toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translate(-50%,10px);opacity:0;background:var(--lcd);color:var(--lcdtx);font-family:var(--mono);font-size:12px;letter-spacing:.04em;padding:10px 16px;border-radius:12px;z-index:40;white-space:nowrap;pointer-events:none;transition:opacity .2s,transform .3s var(--spring)}
   #toast.on{opacity:1;transform:translate(-50%,0)}
+  /* ---------- Modo fluido: video en tiempo real ---------- */
+  video.lv{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;display:none}
+  body.streaming video.lv{display:block}
+  body.streaming img.live,body.streaming .noimg{display:none!important}
+  .row .tx small.on{color:var(--acc)}
+
   /* ---------- Mando sin scroll: todo cabe en la pantalla ---------- */
   #t-remote{gap:10px;padding:12px 16px 8px}
   #t-remote .monitor{padding:6px;gap:6px}
@@ -332,6 +338,7 @@
       <button class="row" data-set="autostart" aria-pressed="false"><span class="tx"><b>Abrir al encender la TV</b><small>AUTOARRANQUE</small></span><span class="sw"></span></button>
       <button class="row" data-set="fsAuto" aria-pressed="false"><span class="tx"><b>Pantalla completa al reproducir</b><small>AUTO FULLSCREEN</small></span><span class="sw"></span></button>
       <button class="row" data-set="desktop" aria-pressed="true"><span class="tx"><b>Modo escritorio</b><small>PÁGINAS VERSIÓN PC</small></span><span class="sw"></span></button>
+      <button class="row" id="fluidRow" aria-pressed="false"><span class="tx"><b>Modo fluido (tiempo real)</b><small id="fluidSub">VIDEO EN VIVO Y TECLAS INSTANTÁNEAS</small></span><span class="sw"></span></button>
       <button class="row" id="hapticRow" aria-pressed="true"><span class="tx"><b>Vibración</b><small>RESPUESTA HÁPTICA</small></span><span class="sw"></span></button>
     </div>
     <div class="card">
@@ -452,6 +459,7 @@ let speedMul = Number(store.get('speed', '1')) || 1;
 let dpadSens = Number(store.get('dpad', '1')) || 1;
 let mode = store.get('mode', 'web'), tvinfo = { adb: false }, apps = [];
 let fsOn = false, fsMode = store.get('fsMode', 'cursor'), rtt = null;
+let fluid = { on: false, state: 'off' }, streaming = false, jmux = null, jmuxLoading = null;
 const TV = () => mode === 'tv';
 const PLAY = '<path d="M8 5l12 7-12 7z"/>';
 const PAUSE = '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>';
@@ -523,11 +531,15 @@ function connect() {
   if (!token) return showLogin();
   opened = false;
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?role=ctl&token=${encodeURIComponent(token)}`);
+  ws.binaryType = 'arraybuffer';
+  streaming = false;
   ws.onopen = () => { opened = true; updateWatch(); render(); };
   ws.onmessage = (e) => {
+    if (e.data instanceof ArrayBuffer) return onVideo(e.data);
     const m = JSON.parse(e.data);
     switch (m.type) {
-      case 'hello': tvOnline = m.tv; state = m.state || {}; lib = m.library || []; tvinfo = m.tvinfo || tvinfo; apps = m.apps || []; renderLib(); renderApps(); render(); flush(); break;
+      case 'hello': tvOnline = m.tv; state = m.state || {}; lib = m.library || []; tvinfo = m.tvinfo || tvinfo; apps = m.apps || []; if (m.fluid) setFluid(m.fluid); renderLib(); renderApps(); render(); flush(); break;
+      case 'fluid': setFluid(m); break;
       case 'tv': tvOnline = m.online; if (!m.online) state = {}; render(); flush(); break;
       case 'state': tvOnline = true; state = m; render(); break;
       case 'frame': if (!TV()) setLive('data:image/jpeg;base64,' + m.data); break;
@@ -558,7 +570,12 @@ function send(o) {
 
 // ---------- Pantalla en vivo ----------
 const liveVisible = () => !document.hidden && (fsOn || tab === 't-remote' || tab === 't-video');
-function updateWatch() { send({ type: 'watch', on: liveVisible() && !TV(), hq: fsOn && !remoteLike() }); }
+function updateWatch() {
+  const wantStream = fluid.on && liveVisible() && !!ws && ws.readyState === 1;
+  if (wantStream !== streaming) { streaming = wantStream; send({ type: 'stream', on: wantStream }); if (wantStream) startPlayer(); else stopPlayer(); }
+  const usingVideo = streaming && fluid.state === 'on';
+  send({ type: 'watch', on: liveVisible() && !TV() && !usingVideo, hq: fsOn && !remoteLike() });
+}
 function setLive(src) {
   $$('img.live').forEach((i) => { i.src = src; });
   $$('.noimg').forEach((n) => n.style.display = 'none');
@@ -573,7 +590,7 @@ let shotUrl = null, shotBusy = false, kickT = null;
 function kickShot() { clearTimeout(kickT); kickT = setTimeout(grabShot, 220); }
 setInterval(() => grabShot(), 1500);
 async function grabShot() {
-  if (!TV() || !liveVisible() || !token || shotBusy) return;
+  if (!TV() || !liveVisible() || !token || shotBusy || (streaming && fluid.state === 'on')) return;
   shotBusy = true;
   try {
     const r = await fetch('/api/tv/screen', { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' });
@@ -582,6 +599,57 @@ async function grabShot() {
   } catch {}
   shotBusy = false;
 }
+
+// ---------- Modo fluido: video H.264 en tiempo real ----------
+const lv = document.createElement('video');
+lv.className = 'lv'; lv.muted = true; lv.autoplay = true; lv.playsInline = true; lv.setAttribute('aria-label', 'Pantalla de la TV en vivo');
+function loadJmuxer() {
+  if (window.JMuxer) return Promise.resolve();
+  if (!jmuxLoading) jmuxLoading = new Promise((ok, fail) => { const sc = document.createElement('script'); sc.src = '/vendor/jmuxer.min.js'; sc.onload = ok; sc.onerror = fail; document.head.appendChild(sc); });
+  return jmuxLoading;
+}
+async function startPlayer() {
+  try { await loadJmuxer(); } catch { toast('NO SE PUDO CARGAR EL REPRODUCTOR'); return; }
+  if (!streaming || jmux) return;
+  jmux = new JMuxer({ node: lv, mode: 'video', flushingTime: 0, fps: 30, maxDelay: 300, clearBuffer: true, debug: false });
+  placeVideo();
+}
+function stopPlayer() { if (jmux) { try { jmux.destroy(); } catch {} jmux = null; } document.body.classList.remove('streaming'); }
+function onVideo(buf) {
+  if (!jmux) return;
+  const data = new Uint8Array(buf, 1);
+  try { jmux.feed({ video: data }); } catch {}
+  if (!document.body.classList.contains('streaming') && (new Uint8Array(buf, 0, 1)[0] & 2)) document.body.classList.add('streaming');
+  if (lv.paused) lv.play().catch(() => {});
+}
+// Mantiene el retraso al mínimo: si el video se atrasa, salta al final del búfer
+setInterval(() => {
+  if (!jmux || !lv.buffered.length) return;
+  const end = lv.buffered.end(lv.buffered.length - 1);
+  if (end - lv.currentTime > 0.35) lv.currentTime = Math.max(0, end - 0.05);
+}, 500);
+// Un solo video que se mueve a la pantalla visible (Mando, Video o pantalla completa)
+function placeVideo() {
+  const host = fsOn ? $('.fsurf') : $(tab === 't-video' ? '[data-screen=video]' : '[data-screen=remote]');
+  if (host && lv.parentNode !== host) { host.insertBefore(lv, $('.noimg', host) || host.firstChild); lv.play().catch(() => {}); }
+}
+function setFluid(f) {
+  const prev = fluid.state;
+  fluid = { ...fluid, ...f };
+  $('#fluidRow').setAttribute('aria-pressed', String(!!fluid.on));
+  const sub = $('#fluidSub');
+  sub.textContent = !fluid.on ? 'VIDEO EN VIVO Y TECLAS INSTANTÁNEAS' : fluid.state === 'on' ? 'ACTIVO · VIDEO EN VIVO' : fluid.state === 'starting' ? 'INICIANDO…' : fluid.state === 'error' ? 'ERROR · USANDO CAPTURAS' : 'ACTIVO · SE INICIA AL MIRAR';
+  sub.classList.toggle('on', fluid.on && fluid.state === 'on');
+  if (fluid.state === 'error' && prev !== 'error' && fluid.on) { toast('MODO FLUIDO: ' + (fluid.error || 'ERROR').toUpperCase()); haptic.error(); }
+  if (fluid.state !== 'on') document.body.classList.remove('streaming');
+  updateWatch(); render();
+}
+$('#fluidRow').onclick = () => {
+  if (!tvinfo.adb) { haptic.error(); return toast('NECESITA CONEXIÓN ADB CON LA TV'); }
+  const on = $('#fluidRow').getAttribute('aria-pressed') !== 'true';
+  $('#fluidRow').setAttribute('aria-pressed', String(on)); haptic.medium();
+  send({ type: 'fluid:set', on });
+};
 
 // ---------- Pestañas ----------
 function go(id) {
@@ -592,7 +660,7 @@ function go(id) {
   const dark = id === 't-video';
   document.body.classList.toggle('dark', dark);
   $('meta[name=theme-color]').content = dark ? '#161616' : '#E7E3DC';
-  updateWatch(); haptic.tick();
+  updateWatch(); placeVideo(); haptic.tick();
 }
 $$('nav button').forEach((b) => b.onclick = () => go(b.dataset.tab));
 document.addEventListener('visibilitychange', updateWatch);
@@ -744,12 +812,12 @@ const fs = $('#fs');
 async function enterFs() {
   fsOn = true; fs.classList.add('on'); haptic.medium();
   if (TV() && fsMode === 'cursor') fsMode = 'dpad';
-  renderFsModes(); updateWatch(); renderNet();
+  renderFsModes(); updateWatch(); renderNet(); placeVideo();
   try { await document.documentElement.requestFullscreen(); await screen.orientation.lock('landscape'); } catch {}
   idle();
 }
 async function exitFs() {
-  fsOn = false; fs.classList.remove('on'); updateWatch(); haptic.light();
+  fsOn = false; fs.classList.remove('on'); updateWatch(); placeVideo(); haptic.light();
   try { screen.orientation.unlock(); } catch {}
   try { if (document.fullscreenElement) await document.exitFullscreen(); } catch {}
 }
@@ -770,7 +838,8 @@ fs.addEventListener('touchstart', idle, { passive: true });
   }, 30);
   // Convierte un punto de la pantalla del celular a fracción (0–1) de la imagen de la TV
   const frac = (x, y) => {
-    const r = img.getBoundingClientRect(), iw = img.naturalWidth || 16, ih = img.naturalHeight || 9;
+    const v = document.body.classList.contains('streaming');
+    const m = v ? lv : img, r = m.getBoundingClientRect(), iw = (v ? lv.videoWidth : img.naturalWidth) || 16, ih = (v ? lv.videoHeight : img.naturalHeight) || 9;
     const s = Math.min(r.width / iw, r.height / ih), w = iw * s, h = ih * s, ox = (r.width - w) / 2, oy = (r.height - h) / 2;
     return { x: (x - r.left - ox) / w, y: (y - r.top - oy) / h };
   };
@@ -815,7 +884,7 @@ function render() {
   const label = s.url ? (s.title || host(s.url)) : (tvOnline ? 'Pantalla de inicio' : '—');
   if (!connected) { setChip(false, 'SIN SERVIDOR'); clearLive('SIN CONEXIÓN CON EL SERVIDOR'); }
   else if (!tvOnline) { setChip(false, 'TV DESCONECTADA'); clearLive('LA APP NO ESTÁ ABIERTA EN LA TV'); }
-  else setChip(true, playing ? 'REPRODUCIENDO' : 'EN VIVO');
+  else setChip(true, (playing ? 'REPRODUCIENDO' : 'EN VIVO') + (streaming && fluid.state === 'on' ? ' · FLUIDO' : ''));
   $$('.mtitle').forEach((e) => e.textContent = (s.url ? host(s.url) + ' · ' : '') + label);
   $('#vTitle').textContent = label;
   const f = s.dur ? s.pos / s.dur : 0;
@@ -834,7 +903,7 @@ function renderTv(connected) {
   if (!connected) { setChip(false, 'SIN SERVIDOR'); clearLive('SIN CONEXIÓN CON EL SERVIDOR'); }
   else if (!i.adb) { setChip(false, 'SIN ADB'); clearLive('ACTIVA LA DEPURACIÓN INALÁMBRICA EN LA TV'); }
   else if (i.awake === false) setChip(false, 'TV EN REPOSO');
-  else setChip(true, 'EN VIVO');
+  else setChip(true, 'EN VIVO' + (streaming && fluid.state === 'on' ? ' · FLUIDO' : ''));
   $$('.mtitle').forEach((e) => e.textContent = i.adb ? (i.awake === false ? 'TV en reposo · toca ⏻' : (i.label || 'Inicio')) : '—');
   $('#vTitle').textContent = i.label || '—';
   $$('.ppIcon').forEach((x) => x.innerHTML = PLAY);

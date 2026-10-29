@@ -50,6 +50,8 @@ class TvAdb extends EventEmitter {
     this.shotCache = null; this.shotAt = 0; this.shotBusy = null;
   }
 
+  get bin() { return ADB; }
+
   run(args, { timeout = 8000, buffer = false } = {}) {
     return new Promise((resolve) => {
       execFile(ADB, args, { timeout, maxBuffer: 32 * 1024 * 1024, encoding: buffer ? 'buffer' : 'utf8', windowsHide: true },

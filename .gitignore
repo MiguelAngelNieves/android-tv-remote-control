@@ -18,3 +18,6 @@ tv-app/.idea/
 *.iml
 .DS_Store
 Thumbs.db
+
+# Servidor de scrcpy (se descarga solo la primera vez)
+server/vendor/

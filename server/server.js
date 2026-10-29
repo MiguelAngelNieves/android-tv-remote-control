@@ -8,6 +8,8 @@ const path = require('path');
 const express = require('express');
 const { WebSocketServer } = require('ws');
 const tvAdb = require('./adb');
+const { Scrcpy } = require('./scrcpy');
+const fluid = new Scrcpy(tvAdb);
 
 const PORT = Number(process.env.PORT) || 8080;
 const TOKEN = process.env.TOKEN || '';
@@ -27,6 +29,7 @@ const sameToken = (t) => {
 let db = { library: [] };
 try { db = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch { /* primera vez */ }
 if (!Array.isArray(db.library)) db.library = [];
+if (!db.settings || typeof db.settings !== 'object') db.settings = {};
 const save = () => fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
 
 // ---- Estado ----
@@ -54,6 +57,8 @@ function normalizeUrl(u) {
 const app = express();
 app.use(express.json({ limit: '50kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+// Reproductor de video del modo fluido (jmuxer, MIT)
+app.use('/vendor', express.static(path.join(__dirname, 'node_modules', 'jmuxer', 'dist')));
 
 const auth = (req, res, next) => {
   const t = (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || req.query.token;
@@ -137,7 +142,7 @@ wss.on('connection', (ws) => {
 
   ctls.add(ws);
   tvAdb.active = true;
-  sendJson(ws, { type: 'hello', tv: !!tv, state: lastState, library: db.library, tvinfo: tvAdb.info, apps: tvAdb.apps });
+  sendJson(ws, { type: 'hello', tv: !!tv, state: lastState, library: db.library, tvinfo: tvAdb.info, apps: tvAdb.apps, fluid: fluidInfo() });
   ws.on('message', (raw) => {
     let m; try { m = JSON.parse(raw); } catch { return; }
     switch (m.type) {
@@ -154,12 +159,23 @@ wss.on('connection', (ws) => {
         db.library = db.library.filter((i) => i.id !== m.id);
         save(); return broadcast({ type: 'library', items: db.library });
       // --- TV completa por ADB ---
-      case 'tv:key': if (!tvAdb.key(String(m.key))) sendJson(ws, { type: 'error', error: 'adb_offline' }); return;
-      case 'tv:text': if (!tvAdb.text(m.text)) sendJson(ws, { type: 'error', error: 'adb_offline' }); return;
+      case 'tv:key': if (!fluid.key(String(m.key)) && !tvAdb.key(String(m.key))) sendJson(ws, { type: 'error', error: 'adb_offline' }); return;
+      case 'tv:text': if (!fluid.text(m.text) && !tvAdb.text(m.text)) sendJson(ws, { type: 'error', error: 'adb_offline' }); return;
       case 'tv:app': if (!tvAdb.launch(String(m.pkg))) sendJson(ws, { type: 'error', error: 'adb_offline' }); return;
       case 'tv:power': tvAdb.power(String(m.mode || 'toggle')); return;
       case 'tv:apps': tvAdb.loadApps(); return;
-      case 'tv:tap': tvAdb.tap(Number(m.x), Number(m.y)); return;
+      case 'tv:tap': if (!fluid.tap(Number(m.x), Number(m.y))) tvAdb.tap(Number(m.x), Number(m.y)); return;
+      // --- Modo fluido (scrcpy) ---
+      case 'fluid:set':
+        db.settings.fluid = !!m.on; save();
+        if (!db.settings.fluid) { ctls.forEach((c) => { c.streaming = false; }); fluid.viewers = 0; fluid.stop(); }
+        return broadcast({ type: 'fluid', ...fluidInfo() });
+      case 'stream':
+        if (m.on && db.settings.fluid && !ws.streaming) {
+          ws.streaming = true; ws.waitKey = true;
+          fluid.addViewer().then((ok) => { if (ok) { if (fluid.config) sendFrame(ws, 1, fluid.config); fluid.resetVideo(); } });
+        } else if (!m.on && ws.streaming) { ws.streaming = false; fluid.removeViewer(); }
+        return;
       case 'ping': return sendJson(ws, { type: 'pong', t: m.t });
       default:
         if (!FORWARD.has(m.type)) return;
@@ -167,12 +183,33 @@ wss.on('connection', (ws) => {
         if (!sendTv(m)) sendJson(ws, { type: 'error', error: 'tv_offline' });
     }
   });
-  ws.on('close', () => { ctls.delete(ws); watchers.delete(ws); updateWatch(); tvAdb.active = ctls.size > 0; });
+  ws.on('close', () => { ctls.delete(ws); watchers.delete(ws); updateWatch(); tvAdb.active = ctls.size > 0; if (ws.streaming) { ws.streaming = false; fluid.removeViewer(); } });
 });
 
 tvAdb.on('info', (info) => broadcast({ type: 'tvinfo', info }));
 tvAdb.on('apps', (apps) => broadcast({ type: 'apps', apps }));
 tvAdb.start();
+
+// ---- Modo fluido: reparte el video H.264 a quien lo esté viendo ----
+function fluidInfo() { return { on: !!db.settings.fluid, state: fluid.state, error: fluid.error, width: fluid.width, height: fluid.height }; }
+// Mensaje binario: [banderas][datos]  banderas: 1 = configuración (SPS/PPS), 2 = fotograma clave
+function sendFrame(ws, flags, data) {
+  if (ws.readyState !== 1) return;
+  const head = Buffer.from([flags]);
+  ws.send(Buffer.concat([head, data]), { binary: true });
+}
+fluid.on('packet', (config, key, data) => {
+  const flags = (config ? 1 : 0) | (key ? 2 : 0);
+  ctls.forEach((c) => {
+    if (!c.streaming || c.readyState !== 1) return;
+    // Si el celular va atrasado (red lenta), se descartan fotogramas hasta el siguiente fotograma clave
+    if (c.bufferedAmount > 1.5 * 1024 * 1024) { if (!c.waitKey) { c.waitKey = true; fluid.resetVideo(); } return; }
+    if (c.waitKey && !config && !key) return;
+    if (key) c.waitKey = false;
+    sendFrame(c, flags, data);
+  });
+});
+fluid.on('state', () => broadcast({ type: 'fluid', ...fluidInfo() }));
 
 setInterval(() => {
   wss.clients.forEach((ws) => {
