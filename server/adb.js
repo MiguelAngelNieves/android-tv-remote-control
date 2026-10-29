@@ -181,7 +181,7 @@ class TvAdb extends EventEmitter {
   // Captura de pantalla de cualquier app (Netflix/Disney+ salen en negro por DRM).
   async screenshot() {
     if (!this.online) return null;
-    if (this.shotCache && Date.now() - this.shotAt < 1200) return this.shotCache;
+    if (this.shotCache && Date.now() - this.shotAt < 300) return this.shotCache;
     if (this.shotBusy) return this.shotBusy;
     this.shotBusy = (async () => {
       const png = await this.run(['-s', this.serial, 'exec-out', 'screencap', '-p'], { timeout: 10000, buffer: true });

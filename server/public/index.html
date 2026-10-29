@@ -210,6 +210,19 @@
   .btn-main:disabled{opacity:.6}
   #toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translate(-50%,10px);opacity:0;background:var(--lcd);color:var(--lcdtx);font-family:var(--mono);font-size:12px;letter-spacing:.04em;padding:10px 16px;border-radius:12px;z-index:40;white-space:nowrap;pointer-events:none;transition:opacity .2s,transform .3s var(--spring)}
   #toast.on{opacity:1;transform:translate(-50%,0)}
+  /* ---------- Mando sin scroll: todo cabe en la pantalla ---------- */
+  #t-remote{gap:10px;padding:12px 16px 8px}
+  #t-remote .monitor{padding:6px;gap:6px}
+  #t-remote .screen{width:min(100%,calc(26dvh * 16 / 9));margin:0 auto}
+  #t-remote .apps button{height:32px}
+  #t-remote .panel{flex:1 1 0!important;min-height:250px;padding:8px;gap:8px}
+  #t-remote #pad{min-height:140px}
+  #t-remote .ring{height:min(232px,100%)}
+  #t-remote .vrow button{height:38px}
+  #t-remote .key{height:48px}
+  nav{padding:4px 16px 10px}
+  nav button{height:44px}
+  @media (max-height:700px){#t-remote .screen{width:min(100%,calc(22dvh * 16 / 9))}#t-remote .key{height:44px}#t-remote .vrow button{height:34px}}
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -538,6 +551,7 @@ function connect() {
 }
 function flush() { if (pending && tvOnline) { send(pending); pending = null; } }
 function send(o) {
+  if (o.type && o.type.startsWith('tv:') && o.type !== 'tv:power') kickShot();
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(o));
   else if (o.type === 'open') { pending = o; toast('SE ENVIARÁ AL CONECTAR'); }
 }
@@ -554,8 +568,11 @@ function clearLive(msg) {
   $$('.noimg').forEach((n) => { n.textContent = msg; n.style.display = ''; });
 }
 // Modo TV completa: captura por ADB (cualquier app)
-let shotUrl = null, shotBusy = false;
-setInterval(async () => {
+let shotUrl = null, shotBusy = false, kickT = null;
+// Después de tocar algo, pide una imagen nueva enseguida (se siente más rápido)
+function kickShot() { clearTimeout(kickT); kickT = setTimeout(grabShot, 220); }
+setInterval(() => grabShot(), 1500);
+async function grabShot() {
   if (!TV() || !liveVisible() || !token || shotBusy) return;
   shotBusy = true;
   try {
@@ -564,7 +581,7 @@ setInterval(async () => {
     else { const u = URL.createObjectURL(await r.blob()); setLive(u); if (shotUrl) URL.revokeObjectURL(shotUrl); shotUrl = u; }
   } catch {}
   shotBusy = false;
-}, 1500);
+}
 
 // ---------- Pestañas ----------
 function go(id) {
