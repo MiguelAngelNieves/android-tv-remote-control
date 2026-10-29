@@ -56,9 +56,25 @@ class Scrcpy extends EventEmitter {
     this.width = 0; this.height = 0;
     this.config = null;       // último paquete de configuración (SPS/PPS)
     this.viewers = 0; this.idleT = null; this.startP = null;
+    this.fails = []; this.retryT = null;   // reintentos automáticos
   }
 
-  setState(s, err = '') { this.state = s; this.error = err; this.emit('state', { state: s, error: err, width: this.width, height: this.height }); }
+  setState(s, err = '') {
+    // Si se corta mientras alguien mira, se reconecta solo; solo se reporta error si falla 3 veces en un minuto.
+    if (s === 'error' && this.viewers > 0) {
+      const now = Date.now();
+      this.fails = this.fails.filter((t) => now - t < 60000).concat(now);
+      console.log('[fluido] se cortó (' + err + '), reconectando… intento ' + this.fails.length);
+      if (this.fails.length < 3) {
+        clearTimeout(this.retryT);
+        this.retryT = setTimeout(() => { if (this.viewers > 0) this.start(); }, 1500);
+        s = 'starting'; err = '';
+      }
+    }
+    if (s === 'on') this.fails = [];
+    this.state = s; this.error = err;
+    this.emit('state', { state: s, error: err, width: this.width, height: this.height });
+  }
   get running() { return this.state === 'on' && this.control && !this.control.destroyed; }
 
   async ensureJar() {
@@ -76,6 +92,7 @@ class Scrcpy extends EventEmitter {
   }
 
   start() {
+    clearTimeout(this.retryT);
     if (this.state === 'on') return Promise.resolve(true);
     if (this.startP) return this.startP;
     this.startP = this._start().then(() => true, (e) => {
