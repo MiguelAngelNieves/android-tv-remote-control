@@ -1,0 +1,20 @@
+# Dependencias y builds
+server/node_modules/
+tv-app/.gradle/
+tv-app/build/
+tv-app/app/build/
+tv-app/.kotlin/
+*.apk
+*.aab
+
+# Configuración local y secretos (token, ruta del SDK)
+tv-app/local.properties
+server/data.json
+.env
+
+# IDE
+.idea/
+tv-app/.idea/
+*.iml
+.DS_Store
+Thumbs.db
