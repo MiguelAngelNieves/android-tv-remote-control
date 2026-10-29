@@ -60,7 +60,7 @@ class MainActivity : Activity() {
     private var connected = false
     private var retry = 0
     private var watching = false
-    private var tick = 0
+    private var watchHq = false
     private val frameBusy = AtomicBoolean(false)
     private var desktopUa = true
 
@@ -246,7 +246,7 @@ class MainActivity : Activity() {
                 )
                 click()
             }
-            "watch" -> watching = m.optBoolean("on")
+            "watch" -> { watching = m.optBoolean("on"); watchHq = m.optBoolean("hq") }
         }
     }
 
@@ -451,7 +451,7 @@ class MainActivity : Activity() {
         override fun run() {
             if (connected) {
                 sendState()
-                if (watching && (++tick % 2 == 0)) sendFrame()
+                if (watching) sendFrame()   // 1 imagen por segundo mientras alguien mira
             }
             ui.postDelayed(this, 1000)
         }
@@ -490,7 +490,7 @@ class MainActivity : Activity() {
         val w = root.width
         val h = root.height
         if (w == 0 || h == 0 || !frameBusy.compareAndSet(false, true)) return
-        val tw = 640
+        val tw = if (watchHq) 1280 else 640
         val th = h * tw / w
         val bmp = try { Bitmap.createBitmap(tw, th, Bitmap.Config.RGB_565) } catch (e: OutOfMemoryError) { frameBusy.set(false); return }
         val c = Canvas(bmp)
@@ -500,7 +500,7 @@ class MainActivity : Activity() {
         io.execute {
             try {
                 val out = ByteArrayOutputStream()
-                bmp.compress(Bitmap.CompressFormat.JPEG, 55, out)
+                bmp.compress(Bitmap.CompressFormat.JPEG, if (watchHq) 62 else 55, out)
                 val b64 = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
                 ws?.send(JSONObject().put("type", "frame").put("data", b64).toString())
             } finally {

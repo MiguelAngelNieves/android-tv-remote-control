@@ -129,6 +129,17 @@ class TvAdb extends EventEmitter {
     return this.write('input text ' + esc);
   }
 
+  // Toque en un punto de la pantalla (fracciones 0–1). Algunas apps de TV lo ignoran.
+  async tap(fx, fy) {
+    if (!this.online || !(fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1)) return false;
+    if (!this.size) {
+      const out = (await this.sh('wm size')) || '';
+      const m = out.match(/(\d+)x(\d+)\s*$/m);
+      this.size = m ? { w: +m[1], h: +m[2] } : { w: 1920, h: 1080 };
+    }
+    return this.write(`input tap ${Math.round(fx * this.size.w)} ${Math.round(fy * this.size.h)}`);
+  }
+
   async power(mode) {
     if (!this.online) return false;
     if (mode === 'toggle') {

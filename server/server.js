@@ -33,14 +33,14 @@ const save = () => fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
 let tv = null;                 // socket de la TV (uno solo)
 let lastState = {};
 const ctls = new Set();        // mandos conectados
-const watchers = new Set();    // mandos que piden ver la pantalla
+const watchers = new Map();    // mandos que piden ver la pantalla → ¿alta calidad?
 
 const FORWARD = new Set(['open', 'nav', 'media', 'move', 'click', 'scroll', 'text', 'key', 'volume', 'ua', 'settings', 'tap']);
 
 const sendJson = (ws, obj) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); };
 const broadcast = (obj) => ctls.forEach((c) => sendJson(c, obj));
 const sendTv = (obj) => { if (tv && tv.readyState === 1) { tv.send(JSON.stringify(obj)); return true; } return false; };
-const updateWatch = () => sendTv({ type: 'watch', on: watchers.size > 0 });
+const updateWatch = () => sendTv({ type: 'watch', on: watchers.size > 0, hq: [...watchers.values()].some(Boolean) });
 
 function normalizeUrl(u) {
   u = String(u || '').trim();
@@ -127,7 +127,7 @@ wss.on('connection', (ws) => {
     ws.on('message', (raw) => {
       let m; try { m = JSON.parse(raw); } catch { return; }
       if (m.type === 'state') { lastState = m; broadcast(m); }
-      else if (m.type === 'frame') { watchers.forEach((c) => sendJson(c, m)); }
+      else if (m.type === 'frame') { watchers.forEach((_hq, c) => sendJson(c, m)); }
     });
     ws.on('close', () => {
       if (tv === ws) { tv = null; lastState = {}; broadcast({ type: 'tv', online: false }); }
@@ -142,7 +142,7 @@ wss.on('connection', (ws) => {
     let m; try { m = JSON.parse(raw); } catch { return; }
     switch (m.type) {
       case 'watch':
-        if (m.on) watchers.add(ws); else watchers.delete(ws);
+        if (m.on) watchers.set(ws, !!m.hq); else watchers.delete(ws);
         return updateWatch();
       case 'lib:add': {
         const url = normalizeUrl(m.url);
@@ -159,6 +159,8 @@ wss.on('connection', (ws) => {
       case 'tv:app': if (!tvAdb.launch(String(m.pkg))) sendJson(ws, { type: 'error', error: 'adb_offline' }); return;
       case 'tv:power': tvAdb.power(String(m.mode || 'toggle')); return;
       case 'tv:apps': tvAdb.loadApps(); return;
+      case 'tv:tap': tvAdb.tap(Number(m.x), Number(m.y)); return;
+      case 'ping': return sendJson(ws, { type: 'pong', t: m.t });
       default:
         if (!FORWARD.has(m.type)) return;
         if (m.type === 'open') m.url = normalizeUrl(m.url);
