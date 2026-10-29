@@ -8,7 +8,7 @@ const path = require('path');
 const express = require('express');
 const { WebSocketServer } = require('ws');
 const tvAdb = require('./adb');
-const { Scrcpy } = require('./scrcpy');
+const { Scrcpy, LOG: FLUID_LOG } = require('./scrcpy');
 const fluid = new Scrcpy(tvAdb);
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -87,6 +87,7 @@ app.get('/api/tv/screen', auth, async (req, res) => {
 app.post('/api/tv/key', auth, (req, res) => res.json({ ok: tvAdb.key(String(req.body && req.body.key)) }));
 app.post('/api/tv/power', auth, async (req, res) => res.json({ ok: await tvAdb.power(String((req.body && req.body.mode) || 'toggle')) }));
 app.post('/api/tv/app', auth, (req, res) => res.json({ ok: tvAdb.launch(String(req.body && req.body.pkg)) }));
+app.get('/api/fluid/log', auth, (req, res) => res.json({ ...fluidInfo(), viewers: fluid.viewers, log: FLUID_LOG }));
 app.get('/api/tv/info', auth, (req, res) => res.json({ info: tvAdb.info, apps: tvAdb.apps }));
 
 app.get('/api/library', auth,(req, res) => res.json(db.library));
@@ -173,9 +174,11 @@ wss.on('connection', (ws) => {
       case 'stream':
         if (m.on && db.settings.fluid && !ws.streaming) {
           ws.streaming = true; ws.waitKey = true;
-          fluid.addViewer().then((ok) => { if (ok) { if (fluid.config) sendFrame(ws, 1, fluid.config); fluid.resetVideo(); } });
+          // Sin reiniciar el codificador (en el Chromecast eso cortaba el video): hay un fotograma clave cada 2 s
+          fluid.addViewer().then((ok) => { if (ok && fluid.config) sendFrame(ws, 1, fluid.config); });
         } else if (!m.on && ws.streaming) { ws.streaming = false; fluid.removeViewer(); }
         return;
+      case 'stream:key': if (ws.streaming) ws.waitKey = true; return;
       case 'ping': return sendJson(ws, { type: 'pong', t: m.t });
       default:
         if (!FORWARD.has(m.type)) return;
@@ -200,10 +203,12 @@ function sendFrame(ws, flags, data) {
 }
 fluid.on('packet', (config, key, data) => {
   const flags = (config ? 1 : 0) | (key ? 2 : 0);
+  // Cada fotograma clave lleva su configuración (SPS/PPS): así cualquiera puede empezar a decodificar desde ahí
+  if (key && fluid.config) data = Buffer.concat([fluid.config, data]);
   ctls.forEach((c) => {
     if (!c.streaming || c.readyState !== 1) return;
     // Si el celular va atrasado (red lenta), se descartan fotogramas hasta el siguiente fotograma clave
-    if (c.bufferedAmount > 1.5 * 1024 * 1024) { if (!c.waitKey) { c.waitKey = true; fluid.resetVideo(); } return; }
+    if (c.bufferedAmount > 1.5 * 1024 * 1024) { c.waitKey = true; return; }
     if (c.waitKey && !config && !key) return;
     if (key) c.waitKey = false;
     sendFrame(c, flags, data);

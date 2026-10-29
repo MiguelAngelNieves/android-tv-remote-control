@@ -211,8 +211,8 @@
   #toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translate(-50%,10px);opacity:0;background:var(--lcd);color:var(--lcdtx);font-family:var(--mono);font-size:12px;letter-spacing:.04em;padding:10px 16px;border-radius:12px;z-index:40;white-space:nowrap;pointer-events:none;transition:opacity .2s,transform .3s var(--spring)}
   #toast.on{opacity:1;transform:translate(-50%,0)}
   /* ---------- Modo fluido: video en tiempo real ---------- */
-  video.lv{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;display:none}
-  body.streaming video.lv{display:block}
+  .lv{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;display:none}
+  body.streaming .lv{display:block}
   body.streaming img.live,body.streaming .noimg{display:none!important}
   .row .tx small.on{color:var(--acc)}
 
@@ -601,37 +601,104 @@ async function grabShot() {
 }
 
 // ---------- Modo fluido: video H.264 en tiempo real ----------
-const lv = document.createElement('video');
-lv.className = 'lv'; lv.muted = true; lv.autoplay = true; lv.playsInline = true; lv.setAttribute('aria-label', 'Pantalla de la TV en vivo');
+// Si el navegador lo permite (https o red marcada como segura), se decodifica con WebCodecs:
+// cada cuadro se dibuja apenas llega, sin búfer (retraso mínimo). Si no, se usa <video> con JMuxer.
+let useWC = !!(window.VideoDecoder && window.EncodedVideoChunk && window.isSecureContext);
+const lvCanvas = document.createElement('canvas'), lvVideo = document.createElement('video');
+for (const el of [lvCanvas, lvVideo]) { el.className = 'lv'; el.setAttribute('aria-label', 'Pantalla de la TV en vivo'); }
+lvVideo.muted = true; lvVideo.autoplay = true; lvVideo.playsInline = true;
+let lv = useWC ? lvCanvas : lvVideo;
+const lctx = lvCanvas.getContext('2d', { alpha: false, desynchronized: true });
+// Si este navegador no puede decodificar con WebCodecs, se cambia al reproductor <video>
+function fallbackToVideo() {
+  if (!useWC) return;
+  useWC = false; stopPlayer(); if (lvCanvas.parentNode) lvCanvas.remove(); lv = lvVideo;
+  if (streaming) startPlayer();
+}
+let dec = null, decCodec = '', needKey = true, chunkTs = 0, lastArrive = 0, playerOn = false;
+const mediaSize = () => ({ w: lv.videoWidth || lv.width || 16, h: lv.videoHeight || lv.height || 9 });
+const showStreaming = () => { if (!document.body.classList.contains('streaming')) { document.body.classList.add('streaming'); render(); } };
+
 function loadJmuxer() {
   if (window.JMuxer) return Promise.resolve();
   if (!jmuxLoading) jmuxLoading = new Promise((ok, fail) => { const sc = document.createElement('script'); sc.src = '/vendor/jmuxer.min.js'; sc.onload = ok; sc.onerror = fail; document.head.appendChild(sc); });
   return jmuxLoading;
 }
+// Cadena de códec a partir del SPS (perfil, restricciones y nivel), p. ej. "avc1.640028"
+function codecFromConfig(c) {
+  for (let i = 0; i + 4 < c.length; i++) {
+    if (c[i] === 0 && c[i + 1] === 0 && c[i + 2] === 1 && (c[i + 3] & 0x1f) === 7) {
+      const h = (b) => b.toString(16).padStart(2, '0');
+      return 'avc1.' + h(c[i + 4]) + h(c[i + 5]) + h(c[i + 6]);
+    }
+  }
+  return 'avc1.42E01F';
+}
+async function makeDecoder(codec) {
+  try { if (dec && dec.state !== 'closed') dec.close(); } catch {}
+  dec = null;
+  const conf = { codec, optimizeForLatency: true };
+  try { if (!(await VideoDecoder.isConfigSupported(conf)).supported) return fallbackToVideo(); } catch { return fallbackToVideo(); }
+  dec = new VideoDecoder({
+    output: (f) => {
+      if (lv.width !== f.displayWidth || lv.height !== f.displayHeight) { lv.width = f.displayWidth; lv.height = f.displayHeight; }
+      lctx.drawImage(f, 0, 0); f.close(); showStreaming();
+    },
+    error: () => { needKey = true; dec = null; decCodec = ''; send({ type: 'stream:key' }); }
+  });
+  dec.configure(conf);
+  decCodec = codec; needKey = true;
+}
 async function startPlayer() {
-  try { await loadJmuxer(); } catch { toast('NO SE PUDO CARGAR EL REPRODUCTOR'); return; }
-  if (!streaming || jmux) return;
-  jmux = new JMuxer({ node: lv, mode: 'video', flushingTime: 0, fps: 30, maxDelay: 300, clearBuffer: true, debug: false });
+  playerOn = true; needKey = true;
+  if (!useWC) {
+    try { await loadJmuxer(); } catch { toast('NO SE PUDO CARGAR EL REPRODUCTOR'); return; }
+    if (!streaming || jmux) return;
+    jmux = new JMuxer({ node: lv, mode: 'video', flushingTime: 0, fps: 30, maxDelay: 200, clearBuffer: true, debug: false });
+  }
   placeVideo();
 }
-function stopPlayer() { if (jmux) { try { jmux.destroy(); } catch {} jmux = null; } document.body.classList.remove('streaming'); }
+function stopPlayer() {
+  playerOn = false;
+  if (jmux) { try { jmux.destroy(); } catch {} jmux = null; }
+  try { if (dec && dec.state !== 'closed') dec.close(); } catch {} dec = null; decCodec = '';
+  document.body.classList.remove('streaming');
+}
 function onVideo(buf) {
+  if (!playerOn) return;
+  const flags = new Uint8Array(buf, 0, 1)[0], data = new Uint8Array(buf, 1), isCfg = flags & 1, isKey = flags & 2;
+  if (useWC) {
+    if (isCfg || isKey) { const c = codecFromConfig(data); if (!dec || dec.state === 'closed' || c !== decCodec) { decCodec = c; makeDecoder(c); needKey = true; return; } }
+    if (isCfg) return;
+    if (!dec || dec.state !== 'configured') return;
+    if (needKey && !isKey) return;
+    // Si el decodificador se atrasa, se saltan cuadros intermedios hasta el siguiente clave
+    if (!isKey && dec.decodeQueueSize > 4) { needKey = true; send({ type: 'stream:key' }); return; }
+    try { dec.decode(new EncodedVideoChunk({ type: isKey ? 'key' : 'delta', timestamp: (chunkTs += 33333), data })); if (isKey) needKey = false; }
+    catch { needKey = true; }
+    return;
+  }
   if (!jmux) return;
-  const data = new Uint8Array(buf, 1);
-  try { jmux.feed({ video: data }); } catch {}
-  if (!document.body.classList.contains('streaming') && (new Uint8Array(buf, 0, 1)[0] & 2)) document.body.classList.add('streaming');
+  if (needKey && !isKey) return;   // JMuxer necesita empezar por un fotograma clave (trae SPS/PPS)
+  needKey = false;
+  // Duración real entre cuadros: la pantalla de la TV solo manda cuadros cuando cambia
+  const now = performance.now(), d = lastArrive ? Math.min(Math.max(now - lastArrive, 8), 100) : 33; lastArrive = now;
+  if (isCfg) return;
+  try { jmux.feed({ video: data, duration: d }); } catch {}
+  if (isKey) showStreaming();
   if (lv.paused) lv.play().catch(() => {});
 }
-// Mantiene el retraso al mínimo: si el video se atrasa, salta al final del búfer
+// Con <video>: si se acumula búfer, salta al final para no ir atrasado
 setInterval(() => {
-  if (!jmux || !lv.buffered.length) return;
-  const end = lv.buffered.end(lv.buffered.length - 1);
-  if (end - lv.currentTime > 0.35) lv.currentTime = Math.max(0, end - 0.05);
-}, 500);
-// Un solo video que se mueve a la pantalla visible (Mando, Video o pantalla completa)
+  if (useWC || !jmux || !lv.buffered.length) return;
+  const end = lv.buffered.end(lv.buffered.length - 1), lag = end - lv.currentTime;
+  if (lag > 0.25) lv.currentTime = Math.max(0, end - 0.03);
+  else lv.playbackRate = lag > 0.1 ? 1.15 : 1;
+}, 250);
+// Un solo lienzo de video que se mueve a la pantalla visible (Mando, Video o pantalla completa)
 function placeVideo() {
   const host = fsOn ? $('.fsurf') : $(tab === 't-video' ? '[data-screen=video]' : '[data-screen=remote]');
-  if (host && lv.parentNode !== host) { host.insertBefore(lv, $('.noimg', host) || host.firstChild); lv.play().catch(() => {}); }
+  if (host && lv.parentNode !== host) { host.insertBefore(lv, $('.noimg', host) || host.firstChild); if (!useWC) lv.play().catch(() => {}); }
 }
 function setFluid(f) {
   const prev = fluid.state;
@@ -839,7 +906,7 @@ fs.addEventListener('touchstart', idle, { passive: true });
   // Convierte un punto de la pantalla del celular a fracción (0–1) de la imagen de la TV
   const frac = (x, y) => {
     const v = document.body.classList.contains('streaming');
-    const m = v ? lv : img, r = m.getBoundingClientRect(), iw = (v ? lv.videoWidth : img.naturalWidth) || 16, ih = (v ? lv.videoHeight : img.naturalHeight) || 9;
+    const m = v ? lv : img, r = m.getBoundingClientRect(), iw = (v ? mediaSize().w : img.naturalWidth) || 16, ih = (v ? mediaSize().h : img.naturalHeight) || 9;
     const s = Math.min(r.width / iw, r.height / ih), w = iw * s, h = ih * s, ox = (r.width - w) / 2, oy = (r.height - h) / 2;
     return { x: (x - r.left - ox) / w, y: (y - r.top - oy) / h };
   };

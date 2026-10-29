@@ -46,6 +46,14 @@ function download(url, dest, redirects = 5) {
   });
 }
 
+// Últimas líneas del registro del modo fluido (se consultan en /api/fluid/log)
+const LOG = [];
+function log(...a) {
+  const line = new Date().toISOString().slice(11, 23) + ' ' + a.join(' ');
+  LOG.push(line); if (LOG.length > 300) LOG.shift();
+  console.log('[fluido]', ...a);
+}
+
 class Scrcpy extends EventEmitter {
   constructor(adb) {
     super();
@@ -64,14 +72,15 @@ class Scrcpy extends EventEmitter {
     if (s === 'error' && this.viewers > 0) {
       const now = Date.now();
       this.fails = this.fails.filter((t) => now - t < 60000).concat(now);
-      console.log('[fluido] se cortó (' + err + '), reconectando… intento ' + this.fails.length);
+      log('se cortó (' + err + '), reconectando… intento ' + this.fails.length);
       if (this.fails.length < 3) {
         clearTimeout(this.retryT);
         this.retryT = setTimeout(() => { if (this.viewers > 0) this.start(); }, 1500);
         s = 'starting'; err = '';
       }
     }
-    if (s === 'on') this.fails = [];
+    if (s === 'on') { this.fails = []; log('video en vivo', this.width + 'x' + this.height); }
+    if (s === 'off') log('detenido');
     this.state = s; this.error = err;
     this.emit('state', { state: s, error: err, width: this.width, height: this.height });
   }
@@ -79,7 +88,7 @@ class Scrcpy extends EventEmitter {
 
   async ensureJar() {
     if (fs.existsSync(JAR_LOCAL)) return;
-    console.log('[fluido] descargando scrcpy-server v' + VERSION + '…');
+    log('descargando scrcpy-server v' + VERSION + '…');
     await download(JAR_URL, JAR_LOCAL);
   }
 
@@ -96,7 +105,7 @@ class Scrcpy extends EventEmitter {
     if (this.state === 'on') return Promise.resolve(true);
     if (this.startP) return this.startP;
     this.startP = this._start().then(() => true, (e) => {
-      console.error('[fluido]', e.message);
+      log('error al iniciar:', e.message);
       this.stop(true);
       this.setState('error', e.message);
       return false;
@@ -117,13 +126,14 @@ class Scrcpy extends EventEmitter {
     const args = [
       `scid=${scid}`, 'log_level=info', 'audio=false', 'control=true', 'tunnel_forward=true',
       'send_device_meta=false', 'video_codec=h264', 'max_size=1280', 'max_fps=30',
-      'video_bit_rate=4000000', 'clipboard_autosync=false', 'power_on=false', 'cleanup=true'
+      'video_bit_rate=4000000', 'video_codec_options=i-frame-interval:int=2',
+      'clipboard_autosync=false', 'power_on=false', 'cleanup=true'
     ].join(' ');
     const cmd = `CLASSPATH=${JAR_REMOTE} app_process / com.genymobile.scrcpy.Server ${VERSION} ${args}`;
     const p = spawn(this.adb.bin, ['-s', this.adb.serial, 'shell', cmd], { windowsHide: true });
     this.proc = p;
-    p.stdout.on('data', (d) => { const s = String(d).trim(); if (s) console.log('[fluido]', s); });
-    p.stderr.on('data', (d) => { const s = String(d).trim(); if (s) console.log('[fluido]', s); });
+    p.stdout.on('data', (d) => { const s = String(d).trim(); if (s) log('tv:', s); });
+    p.stderr.on('data', (d) => { const s = String(d).trim(); if (s) log('tv:', s); });
     p.on('exit', () => { if (this.proc === p) { this.proc = null; if (this.state !== 'off') { this.stop(true); this.setState('error', 'scrcpy se detuvo en la TV'); } } });
 
     this.video = await this.connectFirst();
@@ -250,4 +260,4 @@ class Scrcpy extends EventEmitter {
   }
 }
 
-module.exports = { Scrcpy, KEYCODES };
+module.exports = { Scrcpy, KEYCODES, LOG };

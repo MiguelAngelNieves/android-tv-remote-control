@@ -193,6 +193,8 @@ Cada versión tiene su etiqueta en git; `git tag` las lista y `git checkout v2.1
 - v2.2: pantalla en vivo arriba, pantalla completa horizontal y trackpad fluido.
 - v2.3: el Mando cabe en la pantalla sin scroll.
 - v2.4: modo fluido con video en tiempo real y teclas instantáneas.
+- v2.4.1: el modo fluido se reconecta solo si se corta.
+- v2.4.2: video con menos retraso (WebCodecs) y sin cortes al empezar a mirar.
 
 ## Licencia
 
