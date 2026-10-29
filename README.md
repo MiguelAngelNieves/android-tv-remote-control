@@ -1,4 +1,4 @@
-# TV Control
+# Android TV Remote Control
 
 Un navegador propio para Android TV que se controla desde el celular, y que además permite manejar el resto de la TV: apps, volumen, encendido y lo que se esté viendo en pantalla.
 
@@ -43,8 +43,8 @@ La TV y el celular se conectan hacia el servidor, así que no hace falta abrir p
 ### 1. Clonar el repositorio
 
 ```
-git clone https://github.com/TU_USUARIO/tvremote.git
-cd tvremote
+git clone https://github.com/MiguelAngelNieves/android-tv-remote-control.git
+cd android-tv-remote-control
 ```
 
 ### 2. Levantar el servidor
