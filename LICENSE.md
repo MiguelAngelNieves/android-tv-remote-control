@@ -1,4 +1,4 @@
-Required Notice: Copyright 2026 Miguel Ángel Nieves (https://github.com/MiguelAngelNieves)
+Required Notice: Copyright 2026 Miguel Ángel Patiño Nieves (https://github.com/MiguelAngelNieves)
 
 # PolyForm Noncommercial License 1.0.0
 
