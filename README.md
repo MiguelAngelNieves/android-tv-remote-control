@@ -16,11 +16,12 @@ Lo hice porque necesitaba ponerle a mi mamá sus clases en la TV desde mi celula
 
 ## Cómo está armado
 
-```
-Celular (PWA) ──┐
-PC (send.py) ───┼──►  Servidor Node  ◄──── App Android TV (WebView + cursor)
-                │          │
-                │          └──── ADB ────► Chromecast / Android TV (cualquier app)
+```mermaid
+flowchart LR
+    Cel["Celular<br/>(PWA)"] --> Srv["Servidor Node"]
+    PC["PC<br/>(send.py)"] --> Srv
+    App["App Android TV<br/>(WebView + cursor)"] --> Srv
+    Srv -- ADB --> TV["Chromecast / Android TV<br/>(cualquier app)"]
 ```
 
 - `server/`: servidor en Node.js con Express y WebSocket; sirve la PWA, hace de puente entre el celular y la TV, y controla el dispositivo por ADB.
