@@ -34,7 +34,7 @@ let lastState = {};
 const ctls = new Set();        // mandos conectados
 const watchers = new Set();    // mandos que piden ver la pantalla
 
-const FORWARD = new Set(['open', 'nav', 'media', 'move', 'click', 'scroll', 'text', 'key', 'volume', 'ua']);
+const FORWARD = new Set(['open', 'nav', 'media', 'move', 'click', 'scroll', 'text', 'key', 'volume', 'ua', 'settings', 'tap']);
 
 const sendJson = (ws, obj) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); };
 const broadcast = (obj) => ctls.forEach((c) => sendJson(c, obj));

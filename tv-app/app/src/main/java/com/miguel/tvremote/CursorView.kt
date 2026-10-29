@@ -14,6 +14,10 @@ class CursorView(ctx: Context) : View(ctx) {
     var cy = 0f
         private set
 
+    /** Tamaño relativo (0.5 – 1.8). 0.9 = el tamaño que ajustaste a mano. Se cambia desde Ajustes. */
+    var sizeFactor = 0.9f
+        set(v) { field = v.coerceIn(0.5f, 1.8f); invalidate() }
+
     private val scale = ctx.resources.displayMetrics.density
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
     private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -32,7 +36,7 @@ class CursorView(ctx: Context) : View(ctx) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        val s = scale * 0.9f
+        val s = scale * sizeFactor
         arrow.reset()
         arrow.moveTo(cx, cy)
         arrow.lineTo(cx, cy + 22f * s)

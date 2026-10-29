@@ -49,6 +49,14 @@ O con curl: `curl -H "Authorization: Bearer $TV_TOKEN" -H "Content-Type: applica
 ## Qué controla
 Abrir URL, atrás/adelante/recargar/inicio, cursor + clic + scroll, teclado (texto, Enter, borrar), play/pausa, ±10/±60 s, barra de progreso, velocidad, silencio, volumen, pantalla completa, modo escritorio, biblioteca de clases, vista en vivo de la TV. El control físico de la TV también sirve (flechas = cursor, OK = clic, Atrás = volver).
 
+## Ajustes desde el celular (v2)
+- **Abrir al encender la TV**: en Android 10+ ejecuta una vez `adb shell appops set com.miguel.tvremote SYSTEM_ALERT_WINDOW allow`.
+- **Pantalla completa al reproducir**, **modo escritorio** y **tamaño del cursor** se guardan en la TV.
+- La velocidad del cursor se guarda en el celular.
+
+## Versiones
+Repositorio git con etiquetas (`git tag`). Volver a una versión: `git checkout v1.0`; regresar: `git checkout main`.
+
 ## Límites conocidos
 - **DRM** (Netflix, Disney+, etc.) no reproduce en un WebView.
 - La vista en vivo puede verse **negra con video en pantalla completa**; el título y progreso siguen llegando.

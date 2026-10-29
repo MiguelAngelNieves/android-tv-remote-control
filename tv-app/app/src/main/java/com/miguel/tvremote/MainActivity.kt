@@ -101,6 +101,7 @@ class MainActivity : Activity() {
                 val s = request.url.scheme ?: return true
                 return !(s == "http" || s == "https")   // ignora intent://, market://, etc.
             }
+            override fun onPageFinished(view: WebView, url: String) { updateHomeStatus() }
         }
         web.webChromeClient = object : WebChromeClient() {
             override fun onShowCustomView(view: View, callback: CustomViewCallback) {
@@ -112,6 +113,12 @@ class MainActivity : Activity() {
             override fun onHideCustomView() { hideCustomView() }
         }
         web.requestFocus()
+
+        // Ajustes guardados en la TV (se cambian desde la pestaña Ajustes del celular)
+        val p = prefs()
+        cursor.sizeFactor = p.getFloat("cursor", 0.9f)
+        desktopUa = p.getBoolean("desktop", true)
+        web.settings.userAgentString = if (desktopUa) desktopUserAgent else null
 
         root.post { cursor.moveTo(root.width / 2f, root.height / 2f) }
         web.loadUrl(intent?.dataString ?: homeUrl())
@@ -157,8 +164,9 @@ class MainActivity : Activity() {
     // Valores de compilación (local.properties), sobreescribibles por adb:
     // adb shell am start -n com.miguel.tvremote/.MainActivity --es server https://... --es token XXXX
 
-    private fun cfg(key: String, def: String) =
-        getSharedPreferences("cfg", Context.MODE_PRIVATE).getString(key, null) ?: def
+    private fun prefs() = getSharedPreferences("cfg", Context.MODE_PRIVATE)
+
+    private fun cfg(key: String, def: String) = prefs().getString(key, null) ?: def
 
     private fun applyConfigExtras(i: Intent?) {
         val server = i?.getStringExtra("server")
@@ -182,7 +190,7 @@ class MainActivity : Activity() {
         val req = try { Request.Builder().url(wsUrl).build() } catch (e: Exception) { scheduleReconnect(); return }
         ws = http.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                ui.post { if (webSocket === ws) { connected = true; retry = 0 } }
+                ui.post { if (webSocket === ws) { connected = true; retry = 0; updateHomeStatus() } }
             }
             override fun onMessage(webSocket: WebSocket, text: String) {
                 ui.post {
@@ -199,6 +207,7 @@ class MainActivity : Activity() {
         ui.post {
             if (socket !== ws) return@post
             connected = false; watching = false
+            updateHomeStatus()
             scheduleReconnect()
         }
     }
@@ -228,7 +237,36 @@ class MainActivity : Activity() {
             "media" -> media(m.optString("action"), m.optDouble("value", 0.0))
             "volume" -> volume(m.optString("dir"))
             "ua" -> setDesktop(m.optBoolean("desktop", true))
+            "settings" -> applySettings(m)
+            "tap" -> {
+                cursor.moveTo(
+                    (m.optDouble("x", 0.5).toFloat() * root.width).coerceIn(0f, root.width - 1f),
+                    (m.optDouble("y", 0.5).toFloat() * root.height).coerceIn(0f, root.height - 1f)
+                )
+                click()
+            }
             "watch" -> watching = m.optBoolean("on")
+        }
+    }
+
+    private fun applySettings(m: JSONObject) {
+        val e = prefs().edit()
+        if (m.has("autostart")) e.putBoolean("autostart", m.optBoolean("autostart"))
+        if (m.has("fsAuto")) e.putBoolean("fsAuto", m.optBoolean("fsAuto"))
+        if (m.has("cursor")) {
+            val c = m.optDouble("cursor", 0.9).toFloat()
+            e.putFloat("cursor", c)
+            cursor.sizeFactor = c
+        }
+        e.apply()
+        if (m.has("desktop") && m.optBoolean("desktop") != desktopUa) setDesktop(m.optBoolean("desktop"))
+        sendState()
+    }
+
+    /** Le dice a la página de inicio si hay conexión con el servidor. */
+    private fun updateHomeStatus() {
+        if (web.url?.startsWith(homeUrl()) == true) {
+            web.evaluateJavascript("window.setTvStatus&&window.setTvStatus($connected)", null)
         }
     }
 
@@ -245,6 +283,7 @@ class MainActivity : Activity() {
 
     private fun setDesktop(on: Boolean) {
         desktopUa = on
+        prefs().edit().putBoolean("desktop", on).apply()
         web.settings.userAgentString = if (on) desktopUserAgent else null
         web.reload()
     }
@@ -350,7 +389,7 @@ class MainActivity : Activity() {
             "seekto" -> "v.currentTime=$value"
             "speed" -> "v.playbackRate=$value"
             "mute" -> "v.muted=!v.muted"
-            "fullscreen" -> "if(document.fullscreenElement){document.exitFullscreen()}else{(v.requestFullscreen||v.webkitRequestFullscreen).call(v)}"
+            "fullscreen" -> { toggleFullscreen(); return }
             else -> return
         }
         web.evaluateJavascript(mediaJs(body)) { r ->
@@ -362,6 +401,30 @@ class MainActivity : Activity() {
                     "fullscreen" -> sendKey(KeyEvent.KEYCODE_F)
                     "mute" -> sendKey(KeyEvent.KEYCODE_M)
                 }
+            }
+        }
+    }
+
+    /**
+     * requestFullscreen() necesita un gesto real del usuario. Truco: armamos un listener de F8 en la
+     * página y luego enviamos F8 como tecla nativa (Android la trata como gesto real).
+     */
+    private fun toggleFullscreen(enterOnly: Boolean = false) {
+        val js = "(function(){var vs=[].slice.call(document.querySelectorAll('video'));" +
+                "var v=vs.filter(function(x){return !x.paused})[0]||" +
+                "vs.sort(function(a,b){return b.clientWidth*b.clientHeight-a.clientWidth*a.clientHeight})[0];" +
+                "if(document.fullscreenElement||document.webkitFullscreenElement){" +
+                (if (enterOnly) "return 'already'" else "(document.exitFullscreen||document.webkitExitFullscreen).call(document);return 'exit'") + "}" +
+                "if(!v)return 'none';window.__tvfs=v;" +
+                "if(!window.__tvfsl){window.__tvfsl=1;window.addEventListener('keydown',function(e){" +
+                "if(e.keyCode===119&&window.__tvfs){e.preventDefault();e.stopImmediatePropagation();" +
+                "var t=window.__tvfs;window.__tvfs=null;(t.requestFullscreen||t.webkitRequestFullscreen).call(t)}},true)}" +
+                "return 'arm'})()"
+        web.evaluateJavascript(js) { r ->
+            when {
+                r == null -> {}
+                r.contains("arm") -> sendKey(KeyEvent.KEYCODE_F8)
+                r.contains("none") && !enterOnly -> sendKey(KeyEvent.KEYCODE_F)  // video dentro de iframe
             }
         }
     }
@@ -378,7 +441,10 @@ class MainActivity : Activity() {
             "var v=vs.filter(function(x){return !x.paused})[0]||" +
             "vs.sort(function(a,b){return b.clientWidth*b.clientHeight-a.clientWidth*a.clientHeight})[0];" +
             "return JSON.stringify(v?{has:1,paused:v.paused,pos:v.currentTime||0," +
-            "dur:isFinite(v.duration)?v.duration:0,muted:v.muted,rate:v.playbackRate}:{has:0})})()"
+            "dur:isFinite(v.duration)?v.duration:0,muted:v.muted,rate:v.playbackRate," +
+            "fs:!!(document.fullscreenElement||document.webkitFullscreenElement)}:{has:0})})()"
+
+    private var wasPlaying = false
 
     private val loop = object : Runnable {
         override fun run() {
@@ -397,11 +463,24 @@ class MainActivity : Activity() {
             } catch (_: Exception) {
                 JSONObject().put("has", 0)
             }
+            // Pantalla completa automática cuando empieza un video (si está activada)
+            val playing = o.optInt("has") == 1 && !o.optBoolean("paused", true)
+            if (playing && !wasPlaying && !o.optBoolean("fs") && customView == null &&
+                prefs().getBoolean("fsAuto", false)) toggleFullscreen(enterOnly = true)
+            wasPlaying = playing
+
+            val p = prefs()
+            val home = web.url?.startsWith(homeUrl()) == true
             o.put("type", "state")
-                .put("url", web.url ?: "")
-                .put("title", web.title ?: "")
+                .put("url", if (home) "" else web.url ?: "")
+                .put("title", if (home) "" else web.title ?: "")
                 .put("canBack", web.canGoBack())
                 .put("desktop", desktopUa)
+                .put("settings", JSONObject()
+                    .put("autostart", p.getBoolean("autostart", false))
+                    .put("fsAuto", p.getBoolean("fsAuto", false))
+                    .put("desktop", desktopUa)
+                    .put("cursor", cursor.sizeFactor.toDouble()))
             ws?.send(o.toString())
         }
     }

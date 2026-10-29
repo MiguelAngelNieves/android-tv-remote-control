@@ -3,236 +3,561 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<meta name="theme-color" content="#0e0f13">
+<meta name="theme-color" content="#E7E3DC">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
 <title>TV Control</title>
 <style>
-  :root{--bg:#0e0f13;--card:#181a21;--line:#272a35;--fg:#e8e9ee;--mut:#8b91a1;--acc:#6aa7ff;--ok:#4cd28a;--bad:#ff6b6b}
+  :root{
+    --paper:#E7E3DC;--card:#F6F4F0;--inset:#E2DED6;--ink:#1A1A1A;--mut:#5E5A52;
+    --lcd:#161616;--lcd2:#232220;--lcd3:#33312D;--lcdtx:#F2EFE9;--lcdmut:#9A958C;
+    --acc:#FF5B1F;--ok:#2F9E5B;--bad:#C4271B;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --shadow:0 1px 0 rgba(255,255,255,.8) inset,0 10px 24px rgba(60,50,40,.12);
+  }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:15px system-ui,sans-serif;overscroll-behavior:none}
-  body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
-  header{display:flex;gap:8px;padding:10px 12px;align-items:center}
-  #dot{width:10px;height:10px;border-radius:50%;background:var(--bad);flex:none}
-  #dot.on{background:var(--ok)} #dot.wait{background:#f2c14e}
-  #url{flex:1;min-width:0;background:var(--card);border:1px solid var(--line);color:var(--fg);border-radius:10px;padding:10px 12px;font-size:15px}
-  button{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:15px}
-  button:active{background:#22252f} button.p{background:var(--acc);color:#07111f;border-color:var(--acc);font-weight:600}
-  nav{display:flex;border-bottom:1px solid var(--line)}
-  nav button{flex:1;border:0;border-radius:0;background:none;color:var(--mut);padding:12px}
-  nav button.a{color:var(--fg);box-shadow:inset 0 -2px var(--acc)}
-  main{flex:1;overflow:auto;padding:12px}
-  .tab{display:none} .tab.a{display:block}
-  #pad{height:34vh;min-height:190px;background:var(--card);border:1px solid var(--line);border-radius:16px;display:flex;align-items:center;justify-content:center;color:var(--mut);touch-action:none;user-select:none;text-align:center;font-size:13px;padding:8px}
-  .row{display:flex;gap:8px;margin-top:10px} .row>*{flex:1}
-  .lbl{margin:14px 0 2px;color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
-  input[type=range]{width:100%;accent-color:var(--acc);margin:8px 0 0}
-  #times{display:flex;justify-content:space-between;color:var(--mut);font-size:12px}
-  .item{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px}
-  .item .t{flex:1;min-width:0;text-align:left;background:none;border:0;padding:0;font-size:15px}
-  .item .t small{display:block;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .item .x{flex:none;color:var(--bad);padding:6px 10px}
-  #frame{width:100%;border-radius:12px;background:#000;aspect-ratio:16/9;object-fit:contain;display:block}
-  #info{margin-top:10px;color:var(--mut);font-size:13px;word-break:break-all}
-  #login{position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;gap:12px;justify-content:center;padding:28px;z-index:9}
-  #login h2{margin:0 0 4px} #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#000c;padding:10px 16px;border-radius:20px;display:none;font-size:14px}
+  html,body{margin:0;height:100%;overscroll-behavior:none}
+  body{background:var(--paper);color:var(--ink);font:16px 'Space Grotesk',system-ui,sans-serif;transition:background .25s}
+  body.dark{background:var(--lcd);color:var(--lcdtx)}
+  button,input{font:inherit;color:inherit}
+  button{cursor:pointer}
+  .mono{font-family:var(--mono)}
+  #app{height:100%;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  main{flex:1;min-height:0;position:relative}
+  .tab{position:absolute;inset:0;overflow-y:auto;padding:20px 16px 12px;display:none;flex-direction:column;gap:12px}
+  .tab.a{display:flex}
+
+  /* ---------- navegación inferior ---------- */
+  nav{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px 16px 14px}
+  nav button{height:46px;border:0;border-radius:12px;background:transparent;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;color:#4A463F;position:relative}
+  nav button.a{background:var(--ink);color:var(--card)}
+  body.dark nav button{color:var(--lcdmut)} body.dark nav button.a{background:var(--lcdtx);color:var(--lcd)}
+  nav .live{position:absolute;top:8px;right:10px;width:7px;height:7px;border-radius:50%;background:var(--acc);display:none}
+  nav .live.on{display:block}
+
+  /* ---------- pantallita (LCD) ---------- */
+  .lcd{background:var(--lcd);color:var(--lcdtx);border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;font-family:var(--mono)}
+  .lcd-top{display:flex;justify-content:space-between;font-size:11px;letter-spacing:.1em;color:var(--lcdmut)}
+  #stTxt{color:var(--lcdmut)} #stTxt.on{color:var(--acc)} #stTxt.bad{color:#FF7A6E}
+  #lcdTitle{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lcd-prog{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--lcdmut)}
+  .lcd-prog .bar{flex:1;height:3px;background:var(--lcd3)} .lcd-prog i{display:block;height:3px;width:0;background:var(--acc)}
+
+  /* ---------- URL ---------- */
+  .url{display:flex;align-items:center;gap:8px;background:var(--card);border-radius:14px;padding:0 6px 0 14px;height:50px;box-shadow:inset 0 1px 2px rgba(0,0,0,.08)}
+  .url span{font-family:var(--mono);font-size:12px;color:var(--mut)}
+  .url input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:16px}
+  .btn-dark{height:38px;padding:0 14px;border:0;border-radius:10px;background:var(--ink);color:var(--card);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em}
+
+  /* ---------- panel del mando ---------- */
+  .panel{flex:1;min-height:330px;background:var(--card);border-radius:28px;box-shadow:var(--shadow);display:flex;flex-direction:column;padding:14px;gap:14px}
+  #pad{flex:1;min-height:220px;border-radius:20px;display:flex;align-items:center;justify-content:center;touch-action:none;user-select:none;-webkit-user-select:none;position:relative}
+  #pad.press .ring{transform:scale(.985)}
+  .ring{width:min(236px,62vw);aspect-ratio:1;border-radius:50%;background:var(--inset);box-shadow:inset 0 2px 6px rgba(0,0,0,.12);position:relative;display:flex;align-items:center;justify-content:center;pointer-events:none;transition:transform .08s}
+  .ring .ok{width:39%;aspect-ratio:1;border-radius:50%;background:var(--card);box-shadow:0 4px 10px rgba(60,50,40,.18);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.08em}
+  .ring .lbl{position:absolute;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--mut)}
+  .ring .t{top:14px} .ring .b{bottom:14px}
+  .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .key{height:54px;border:0;border-radius:14px;background:var(--ink);color:var(--card);font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em}
+  .key:active{transform:translateY(1px)}
+  .key.play{background:var(--acc);color:var(--ink);display:flex;align-items:center;justify-content:center}
+  .key svg{width:20px;height:20px;fill:currentColor}
+
+  /* ---------- video (oscuro) ---------- */
+  .vhead{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--lcdmut)}
+  #vState.on{color:var(--acc)}
+  .shot{position:relative;width:100%;aspect-ratio:16/9;border-radius:18px;background:var(--lcd2);overflow:hidden}
+  .shot img{width:100%;height:100%;object-fit:contain;display:block}
+  .shot img:not([src]){visibility:hidden}
+  .shot .hint{position:absolute;left:10px;bottom:10px;background:rgba(0,0,0,.6);border-radius:8px;padding:4px 8px;font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--lcdtx);pointer-events:none}
+  .shot .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;color:var(--lcdmut);letter-spacing:.1em;pointer-events:none}
+  #tc{font-family:var(--mono);font-size:56px;font-weight:500;letter-spacing:-2px;line-height:1;font-variant-numeric:tabular-nums}
+  #tc small{font-size:14px;letter-spacing:0;color:var(--lcdmut);margin-left:6px}
+  #vTitle{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ticks{position:relative;height:34px;display:flex;gap:3px;align-items:flex-end}
+  .ticks span{flex:1;height:18px;background:var(--lcd3);border-radius:1px}
+  .ticks span.big{height:34px} .ticks span.f{background:var(--acc)}
+  .ticks input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0}
+  .ctrl{display:flex;align-items:center;justify-content:center;gap:24px;padding:4px 0}
+  .round{width:62px;height:62px;border-radius:50%;border:0;background:var(--lcd3);color:var(--lcdtx);font-family:var(--mono);font-size:14px;font-weight:700}
+  .big-play{width:108px;height:108px;border-radius:50%;border:0;background:var(--acc);color:var(--lcd);box-shadow:0 10px 30px rgba(255,91,31,.35);display:flex;align-items:center;justify-content:center}
+  .big-play svg{width:40px;height:40px;fill:currentColor}
+  .seg{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+  .seg button{height:44px;border:0;border-radius:12px;background:var(--lcd3);color:var(--lcdtx);font-family:var(--mono);font-size:12px;font-weight:700}
+  .seg button.a{background:var(--lcdtx);color:var(--lcd)}
+  #gest{min-height:150px;flex:1;border:1.5px dashed var(--lcd3);border-radius:22px;touch-action:none;user-select:none;-webkit-user-select:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:14px;position:relative}
+  #gest .gl{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-family:var(--mono);font-size:11px;color:var(--lcdmut);letter-spacing:.04em}
+  #gest .gt{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--lcdmut)}
+  #gfb{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-family:var(--mono);font-size:30px;font-weight:700;color:var(--acc);background:rgba(22,22,22,.85);border-radius:22px}
+  .vol{display:flex;gap:8px}
+  .vol button{flex:1;height:44px;border:0;border-radius:12px;background:var(--lcd3);color:var(--lcdtx);font-family:var(--mono);font-size:12px;font-weight:700}
+
+  /* ---------- lista y ajustes ---------- */
+  h1{margin:4px 2px 0;font-size:40px;font-weight:700;letter-spacing:-1.4px}
+  .topline{display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--mut);padding:0 2px}
+  .card{background:var(--card);border-radius:22px;box-shadow:0 8px 20px rgba(60,50,40,.10)}
+  .field{display:flex;align-items:center;gap:8px;background:var(--card);border-radius:14px;padding:0 14px;height:50px;box-shadow:inset 0 1px 2px rgba(0,0,0,.08)}
+  .field input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:16px}
+  .item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--inset)}
+  .item:first-child{border-top:0}
+  .item .open{flex:1;min-width:0;display:flex;align-items:center;gap:12px;border:0;background:none;text-align:left;padding:0}
+  .item .ini{width:40px;height:40px;border-radius:10px;background:var(--ink);color:var(--card);display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+  .item .tx{min-width:0;display:flex;flex-direction:column;gap:2px}
+  .item .tx b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item .tx small{font-family:var(--mono);font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item .del{width:44px;height:44px;border:0;border-radius:12px;background:transparent;color:var(--mut);font-size:18px;flex:none}
+  .empty-list{padding:22px 16px;color:var(--mut);font-size:14px;text-align:center}
+  .row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;border:0;background:none;text-align:left;border-top:1px solid var(--inset)}
+  .row:first-child{border-top:0}
+  .row .tx{display:flex;flex-direction:column;gap:3px}
+  .row .tx b{font-size:16px;font-weight:600}
+  .row .tx small{font-family:var(--mono);font-size:11px;color:var(--mut)}
+  .sw{width:58px;height:30px;border-radius:8px;background:var(--inset);box-shadow:inset 0 1px 3px rgba(0,0,0,.15);position:relative;flex:none}
+  .sw::after{content:'';position:absolute;top:3px;left:3px;width:26px;height:24px;border-radius:6px;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.2);transition:left .15s,background .15s}
+  .row[aria-pressed=true] .sw::after{left:29px;background:var(--acc)}
+  .slider{padding:16px 18px;display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--inset)}
+  .slider:first-child{border-top:0}
+  .slider .hd{display:flex;justify-content:space-between;align-items:baseline}
+  .slider .hd b{font-size:16px;font-weight:600} .slider .hd span{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--mut)}
+  input[type=range].knob{-webkit-appearance:none;appearance:none;width:100%;height:8px;border-radius:4px;background:var(--inset);box-shadow:inset 0 1px 2px rgba(0,0,0,.15);outline:0}
+  input[type=range].knob::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;border-radius:50%;background:var(--card);border:6px solid var(--acc);box-shadow:0 2px 6px rgba(0,0,0,.2)}
+  .srv{background:var(--lcd);color:var(--lcdtx);border-radius:18px;padding:14px 18px;display:flex;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:12px}
+  .srv span:first-child{color:var(--lcdmut)}
+  .outline{height:48px;border:1.5px solid var(--ink);border-radius:14px;background:transparent;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em}
+  .note{font-size:13px;color:var(--mut);line-height:1.45;padding:0 4px}
+  .note code{font-family:var(--mono);font-size:11px;background:var(--inset);padding:2px 4px;border-radius:4px;word-break:break-all}
+
+  /* ---------- teclado (hoja inferior) ---------- */
+  #sheet{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:flex-end;z-index:20}
+  #sheet.on{display:flex}
+  #sheet .in{width:100%;background:var(--paper);border-radius:24px 24px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px}
+  #sheet .krow{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+  #sheet .krow button{height:46px;border:0;border-radius:12px;background:var(--card);font-family:var(--mono);font-size:13px;font-weight:700;box-shadow:0 2px 4px rgba(60,50,40,.08)}
+
+  /* ---------- login ---------- */
+  #login{position:fixed;inset:0;background:var(--paper);display:none;flex-direction:column;justify-content:center;gap:16px;padding:28px;z-index:30}
+  #login.on{display:flex}
+  #login .logo{width:72px;height:72px;border-radius:18px;background:var(--lcd);display:flex;align-items:center;justify-content:center;align-self:center}
+  #login .logo div{width:36px;height:36px;border-radius:50%;background:var(--acc)}
+  #login h2{margin:0;text-align:center;font-size:30px;letter-spacing:-.8px}
+  #login p{margin:0;text-align:center;color:var(--mut)}
+  .pw{display:flex;align-items:center;background:var(--card);border-radius:14px;height:54px;padding:0 4px 0 16px;border:1.5px solid transparent;box-shadow:inset 0 1px 2px rgba(0,0,0,.08)}
+  .pw.err{border-color:var(--bad)}
+  .pw input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:17px}
+  .pw button{width:46px;height:46px;border:0;background:transparent;color:var(--mut);display:flex;align-items:center;justify-content:center}
+  .pw svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  #lerr{min-height:20px;color:var(--bad);font-size:14px;padding:0 4px}
+  .btn-main{height:54px;border:0;border-radius:14px;background:var(--ink);color:var(--card);font-size:17px;font-weight:600}
+  .btn-main:disabled{opacity:.6}
+
+  #toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--lcd);color:var(--lcdtx);font-family:var(--mono);font-size:12px;letter-spacing:.04em;padding:10px 16px;border-radius:12px;display:none;z-index:40;white-space:nowrap}
 </style>
 </head>
 <body>
-<header>
-  <span id="dot"></span>
-  <input id="url" placeholder="Pega un enlace o escribe para buscar" inputmode="url" autocapitalize="off" autocomplete="off">
-  <button id="go" class="p">Ir</button>
-</header>
-<nav>
-  <button data-tab="remote" class="a">Mando</button>
-  <button data-tab="lib">Biblioteca</button>
-  <button data-tab="screen">Pantalla</button>
-</nav>
+<div id="app">
 <main>
-  <section id="remote" class="tab a">
-    <div id="pad">Trackpad<br>1 dedo: mover · toque: clic · 2 dedos: scroll</div>
-    <div class="row">
-      <button data-nav="back">◀ Atrás</button><button data-nav="forward">Adelante ▶</button>
-      <button data-nav="reload">⟳</button><button data-nav="home">⌂</button>
+  <!-- ================= MANDO ================= -->
+  <section id="t-remote" class="tab a">
+    <div class="lcd">
+      <div class="lcd-top"><span>TV</span><span id="stTxt">● CONECTANDO…</span></div>
+      <div id="lcdTitle">—</div>
+      <div class="lcd-prog"><span id="lPos">0:00</span><div class="bar"><i id="lBar"></i></div><span id="lDur">0:00</span></div>
     </div>
-    <div class="lbl">Reproducción</div>
-    <input id="seek" type="range" min="0" max="0" value="0" step="1">
-    <div id="times"><span id="tpos">0:00</span><span id="tdur">0:00</span></div>
-    <div class="row">
-      <button data-seek="-60">−60</button><button data-seek="-10">−10</button>
-      <button id="pp" class="p">⏯</button>
-      <button data-seek="10">+10</button><button data-seek="60">+60</button>
-    </div>
-    <div class="row">
-      <button data-vol="down">Vol −</button><button id="mute">Silencio</button><button data-vol="up">Vol +</button>
-      <button id="fs">Pantalla completa</button>
-    </div>
-    <div class="row">
-      <button data-speed="1">1x</button><button data-speed="1.25">1.25x</button>
-      <button data-speed="1.5">1.5x</button><button data-speed="2">2x</button>
-    </div>
-    <div class="lbl">Teclado</div>
-    <div class="row">
-      <input id="txt" style="flex:3;background:var(--card);border:1px solid var(--line);color:var(--fg);border-radius:10px;padding:10px 12px;font-size:15px" placeholder="Texto para el campo activo en la TV" autocomplete="off">
-      <button id="sendtxt">Enviar</button>
-    </div>
-    <div class="row">
-      <button data-key="Enter">⏎</button><button data-key="Backspace">⌫</button>
-      <button data-key="Escape">Esc</button><button data-key="Tab">Tab</button>
-      <button data-key="ArrowUp">↑</button><button data-key="ArrowDown">↓</button>
-    </div>
-    <div class="row">
-      <button id="desk">Modo escritorio: sí</button>
-      <button id="addcur">+ Guardar página actual</button>
+    <form id="urlForm" class="url" autocomplete="off">
+      <span>URL</span>
+      <input id="url" placeholder="pega un enlace o busca…" inputmode="url" autocapitalize="off" aria-label="Enlace o búsqueda">
+      <button class="btn-dark" type="submit">ENVIAR</button>
+    </form>
+    <div class="panel">
+      <div id="pad" aria-label="Trackpad">
+        <div class="ring"><span class="lbl t">TRACKPAD</span><div class="ok">OK</div><span class="lbl b">2 DEDOS · SCROLL</span></div>
+      </div>
+      <div class="keys">
+        <button class="key" data-nav="back">ATRÁS</button>
+        <button class="key" data-nav="home">INICIO</button>
+        <button class="key" id="kbBtn">TECLAS</button>
+        <button class="key play" data-pp aria-label="Reproducir o pausar"><svg viewBox="0 0 24 24" class="ppIcon"><path d="M8 5l12 7-12 7z"/></svg></button>
+      </div>
     </div>
   </section>
 
-  <section id="lib" class="tab">
-    <div class="row" style="margin-top:0"><input id="ltitle" style="flex:1;background:var(--card);border:1px solid var(--line);color:var(--fg);border-radius:10px;padding:10px 12px;font-size:15px" placeholder="Título (ej. Clase 3 – Inglés)"></div>
-    <div class="row"><input id="lurl" style="flex:1;background:var(--card);border:1px solid var(--line);color:var(--fg);border-radius:10px;padding:10px 12px;font-size:15px" placeholder="Enlace" inputmode="url" autocapitalize="off"><button id="ladd" class="p" style="flex:none">Guardar</button></div>
-    <div id="list"></div>
+  <!-- ================= VIDEO ================= -->
+  <section id="t-video" class="tab">
+    <div class="vhead"><span id="vState">● SIN VIDEO</span><span id="vRate">1×</span></div>
+    <div class="shot" id="shot">
+      <img id="frame" alt="Pantalla de la TV">
+      <div class="empty" id="shotEmpty">CARGANDO IMAGEN…</div>
+      <span class="hint">TOCA LA IMAGEN PARA HACER CLIC</span>
+    </div>
+    <div>
+      <div id="tc">0:00<small>/ 0:00</small></div>
+      <div id="vTitle">—</div>
+    </div>
+    <div class="ticks" id="ticks"><input id="seek" type="range" min="0" max="1" value="0" step="1" aria-label="Posición del video"></div>
+    <div class="ctrl">
+      <button class="round" data-seek="-10" aria-label="Retroceder 10 segundos">−10</button>
+      <button class="big-play" data-pp aria-label="Reproducir o pausar"><svg viewBox="0 0 24 24" class="ppIcon"><path d="M8 5l12 7-12 7z"/></svg></button>
+      <button class="round" data-seek="10" aria-label="Adelantar 10 segundos">+10</button>
+    </div>
+    <div class="seg" id="speeds">
+      <button data-speed="1" class="a">1×</button><button data-speed="1.25">1.25×</button><button data-speed="1.5">1.5×</button><button data-speed="2">2×</button><button id="fsBtn">FULL</button>
+    </div>
+    <div id="gest" aria-label="Zona de gestos">
+      <span class="gt">ZONA DE GESTOS</span>
+      <div class="gl"><span>TOQUE · PAUSA</span><span>← → · ±TIEMPO</span><span>↑ ↓ · VOLUMEN</span><span>2× LADO · ±10 S</span></div>
+      <div id="gfb"></div>
+    </div>
+    <div class="vol"><button data-vol="down">VOL −</button><button id="muteBtn">SILENCIO</button><button data-vol="up">VOL +</button></div>
   </section>
 
-  <section id="screen" class="tab">
-    <img id="frame" alt="Pantalla de la TV">
-    <div id="info"></div>
-    <p style="color:var(--mut);font-size:12px">La captura puede verse negra mientras un video corre en pantalla completa (limitación de Android); el título y el progreso siguen siendo reales.</p>
+  <!-- ================= LISTA ================= -->
+  <section id="t-list" class="tab">
+    <div class="topline"><span>LISTA</span><span id="libCount">0</span></div>
+    <h1>Lista</h1>
+    <div class="field"><input id="lTitle" placeholder="Título (ej. Clase 3)" aria-label="Título"></div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><input id="lUrl" placeholder="Enlace" inputmode="url" autocapitalize="off" aria-label="Enlace"></div>
+      <button class="btn-dark" id="lAdd" style="height:50px">GUARDAR</button>
+    </div>
+    <button class="outline" id="saveCur">+ GUARDAR LO QUE SE VE EN LA TV</button>
+    <div class="card" id="list"></div>
+  </section>
+
+  <!-- ================= AJUSTES ================= -->
+  <section id="t-settings" class="tab">
+    <div class="topline"><span>CONFIG</span><span>v2.0</span></div>
+    <h1>Ajustes</h1>
+    <div class="card">
+      <button class="row" data-set="autostart" aria-pressed="false"><span class="tx"><b>Abrir al encender la TV</b><small>AUTOARRANQUE</small></span><span class="sw"></span></button>
+      <button class="row" data-set="fsAuto" aria-pressed="false"><span class="tx"><b>Pantalla completa al reproducir</b><small>AUTO FULLSCREEN</small></span><span class="sw"></span></button>
+      <button class="row" data-set="desktop" aria-pressed="true"><span class="tx"><b>Modo escritorio</b><small>PÁGINAS VERSIÓN PC</small></span><span class="sw"></span></button>
+    </div>
+    <div class="card">
+      <div class="slider"><div class="hd"><b>Tamaño del cursor</b><span id="curSizeV">M</span></div><input type="range" class="knob" id="curSize" min="0.5" max="1.8" step="0.1" value="0.9" aria-label="Tamaño del cursor"></div>
+      <div class="slider"><div class="hd"><b>Velocidad del cursor</b><span id="curSpeedV">1.0×</span></div><input type="range" class="knob" id="curSpeed" min="0.5" max="2.5" step="0.1" value="1" aria-label="Velocidad del cursor"></div>
+    </div>
+    <div class="srv"><span>SERVIDOR</span><span id="srvHost"></span></div>
+    <button class="outline" id="logout">CERRAR SESIÓN</button>
+    <p class="note">Para que "Abrir al encender" funcione en Android 10 o superior, ejecuta una vez desde el PC:<br><code>adb shell appops set com.miguel.tvremote SYSTEM_ALERT_WINDOW allow</code></p>
   </section>
 </main>
-
-<div id="login">
-  <h2>TV Control</h2>
-  <input id="tok" type="password" placeholder="Token del servidor" style="background:var(--card);border:1px solid var(--line);color:var(--fg);border-radius:10px;padding:12px;font-size:16px">
-  <button id="tokok" class="p">Entrar</button>
+<nav>
+  <button data-tab="t-remote" class="a">MANDO</button>
+  <button data-tab="t-video">VIDEO<span class="live" id="liveDot"></span></button>
+  <button data-tab="t-list">LISTA</button>
+  <button data-tab="t-settings">AJUSTES</button>
+</nav>
 </div>
+
+<!-- Teclado -->
+<div id="sheet">
+  <div class="in">
+    <form id="kbForm" style="display:flex;gap:8px" autocomplete="off">
+      <div class="field" style="flex:1"><input id="kbText" placeholder="Texto para la TV" aria-label="Texto para la TV" enterkeyhint="send"></div>
+      <button class="btn-dark" type="submit" style="height:50px">ENVIAR</button>
+    </form>
+    <div class="krow">
+      <button data-key="Enter">⏎</button><button data-key="Backspace">⌫</button><button data-key="Tab">TAB</button>
+      <button data-key="Escape">ESC</button><button data-key="ArrowUp">↑</button><button data-key="ArrowDown">↓</button>
+    </div>
+    <button class="outline" id="kbClose">CERRAR</button>
+  </div>
+</div>
+
+<!-- Login -->
+<form id="login" autocomplete="off">
+  <div class="logo"><div></div></div>
+  <h2>TV Control</h2>
+  <p>Escribe la clave de tu servidor</p>
+  <div class="pw" id="pwBox">
+    <input id="tok" type="password" placeholder="Clave" aria-label="Clave del servidor" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <button type="button" id="eye" aria-label="Mostrar clave">
+      <svg viewBox="0 0 24 24" id="eyeOn"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+      <svg viewBox="0 0 24 24" id="eyeOff" style="display:none"><path d="M2 12s3.5-7 10-7c2 0 3.7.6 5.1 1.5M22 12s-3.5 7-10 7c-2 0-3.7-.6-5.1-1.5"/><path d="M3 3l18 18"/></svg>
+    </button>
+  </div>
+  <div id="lerr" role="alert"></div>
+  <button class="btn-main" id="tokOk" type="submit">Entrar</button>
+</form>
 <div id="toast"></div>
 
 <script>
 'use strict';
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
-let token = localStorage.getItem('tok') || '';
-let ws = null, opened = false, fails = 0, tab = 'remote', pending = null, lib = [], state = {}, desktop = true, seeking = false;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} }
+};
+let token = store.get('tok', '');
+let ws = null, opened = false, tab = 't-remote', pending = null, lib = [], state = {}, tvOnline = false, seeking = false, wasPlaying = false;
+let speedMul = Number(store.get('speed', '1')) || 1;
+
+const PLAY = '<path d="M8 5l12 7-12 7z"/>';
+const PAUSE = '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>';
 
 function toast(t) { const e = $('#toast'); e.textContent = t; e.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => e.style.display = 'none', 1800); }
-function setDot(c) { $('#dot').className = c; }
 const fmt = (s) => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
 
+// ---------- Comprobar la clave (distingue clave incorrecta de servidor caído) ----------
+async function checkToken(t) {
+  try {
+    const r = await fetch('/api/state', { headers: { Authorization: 'Bearer ' + t }, cache: 'no-store' });
+    if (r.status === 401) return 'bad';
+    return r.ok ? 'ok' : 'offline';
+  } catch { return 'offline'; }
+}
+function showLogin(msg) {
+  $('#login').classList.add('on');
+  $('#lerr').textContent = msg || '';
+  $('#pwBox').classList.toggle('err', !!msg);
+  if (token) $('#tok').value = token;
+}
+$('#eye').onclick = () => {
+  const i = $('#tok'), show = i.type === 'password';
+  i.type = show ? 'text' : 'password';
+  $('#eyeOn').style.display = show ? 'none' : ''; $('#eyeOff').style.display = show ? '' : 'none';
+  $('#eye').setAttribute('aria-label', show ? 'Ocultar clave' : 'Mostrar clave');
+};
+$('#login').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const t = $('#tok').value.trim(); if (!t) return;
+  $('#tokOk').disabled = true; $('#tokOk').textContent = 'Comprobando…';
+  const r = await checkToken(t);
+  $('#tokOk').disabled = false; $('#tokOk').textContent = 'Entrar';
+  if (r === 'bad') return showLogin('La clave no coincide con la del servidor. Revísala e inténtalo de nuevo.');
+  if (r === 'offline') return showLogin('Sin conexión con el servidor. Revisa que esté encendido y que estés en la red correcta.');
+  token = t; store.set('tok', t); $('#login').classList.remove('on'); connect();
+});
+
+// ---------- Conexión ----------
+function setStatus(kind) {
+  const e = $('#stTxt');
+  e.className = kind === 'on' ? 'on' : kind === 'bad' ? 'bad' : '';
+  e.textContent = { on: '● EN LÍNEA', tvoff: '● TV APAGADA O SIN APP', bad: '● SIN SERVIDOR', wait: '● CONECTANDO…' }[kind];
+}
 function connect() {
-  if (!token) { $('#login').style.display = 'flex'; return; }
-  $('#login').style.display = 'none';
-  opened = false;
+  if (!token) return showLogin();
+  opened = false; setStatus('wait');
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?role=ctl&token=${encodeURIComponent(token)}`);
-  ws.onopen = () => { opened = true; fails = 0; setDot('wait'); if (tab === 'screen') send({ type: 'watch', on: true }); };
+  ws.onopen = () => { opened = true; if (tab === 't-video') send({ type: 'watch', on: true }); };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
-    if (m.type === 'hello') { setDot(m.tv ? 'on' : 'wait'); state = m.state || {}; lib = m.library || []; renderLib(); renderState(); if (pending && m.tv) { send(pending); pending = null; } }
-    else if (m.type === 'tv') { setDot(m.online ? 'on' : 'wait'); if (m.online && pending) { send(pending); pending = null; } }
-    else if (m.type === 'state') { state = m; renderState(); }
-    else if (m.type === 'frame') { $('#frame').src = 'data:image/jpeg;base64,' + m.data; }
+    if (m.type === 'hello') { tvOnline = m.tv; state = m.state || {}; lib = m.library || []; renderLib(); renderState(); flush(); }
+    else if (m.type === 'tv') { tvOnline = m.online; if (!m.online) state = {}; renderState(); flush(); }
+    else if (m.type === 'state') { tvOnline = true; state = m; renderState(); }
+    else if (m.type === 'frame') { $('#frame').src = 'data:image/jpeg;base64,' + m.data; $('#shotEmpty').style.display = 'none'; }
     else if (m.type === 'library') { lib = m.items; renderLib(); }
-    else if (m.type === 'error' && m.error === 'tv_offline') toast('La TV está desconectada');
+    else if (m.type === 'error' && m.error === 'tv_offline') toast('LA TV ESTÁ DESCONECTADA');
   };
-  ws.onclose = () => {
-    setDot('');
-    if (!opened && ++fails >= 3) { localStorage.removeItem('tok'); token = ''; fails = 0; toast('Token incorrecto'); }
+  ws.onclose = async () => {
+    setStatus('bad');
+    if (!opened) {
+      const r = await checkToken(token);
+      if (r === 'bad') { ws = null; return showLogin('La clave guardada ya no coincide con la del servidor.'); }
+    }
     setTimeout(connect, 1500);
   };
 }
+function flush() { if (pending && tvOnline) { send(pending); pending = null; } }
 function send(o) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(o));
-  else if (o.type === 'open') pending = o;
+  else if (o.type === 'open') { pending = o; toast('SE ENVIARÁ AL CONECTAR'); }
 }
 
-// ---- Login ----
-$('#tokok').onclick = () => { token = $('#tok').value.trim(); if (token) { localStorage.setItem('tok', token); connect(); } };
+// ---------- Pestañas ----------
+function go(id) {
+  tab = id;
+  $$('nav button').forEach((b) => b.classList.toggle('a', b.dataset.tab === id));
+  $$('.tab').forEach((t) => t.classList.toggle('a', t.id === id));
+  const dark = id === 't-video';
+  document.body.classList.toggle('dark', dark);
+  document.querySelector('meta[name=theme-color]').content = dark ? '#161616' : '#E7E3DC';
+  send({ type: 'watch', on: dark });
+}
+$$('nav button').forEach((b) => b.onclick = () => go(b.dataset.tab));
+document.addEventListener('visibilitychange', () => send({ type: 'watch', on: !document.hidden && tab === 't-video' }));
 
-// ---- Abrir URL ----
-const openUrl = (u) => { u = (u || '').trim(); if (!u) return; send({ type: 'open', url: u }); toast('Enviado a la TV'); };
-$('#go').onclick = () => { openUrl($('#url').value); $('#url').blur(); };
-$('#url').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#go').click(); });
+// ---------- Abrir enlace ----------
+const openUrl = (u) => { u = (u || '').trim(); if (!u) return; send({ type: 'open', url: u }); toast('ENVIADO A LA TV'); };
+$('#urlForm').addEventListener('submit', (e) => { e.preventDefault(); openUrl($('#url').value); $('#url').value = ''; $('#url').blur(); });
 
-// ---- Pestañas ----
-$$('nav button').forEach((b) => b.onclick = () => {
-  tab = b.dataset.tab;
-  $$('nav button').forEach((x) => x.classList.toggle('a', x === b));
-  $$('.tab').forEach((x) => x.classList.toggle('a', x.id === tab));
-  send({ type: 'watch', on: tab === 'screen' });
-});
-document.addEventListener('visibilitychange', () => { if (document.hidden) send({ type: 'watch', on: false }); else send({ type: 'watch', on: tab === 'screen' }); });
-
-// ---- Trackpad ----
+// ---------- Trackpad ----------
 (() => {
   const pad = $('#pad');
-  let last = null, t0 = 0, moved = 0, maxFingers = 0, ax = 0, ay = 0, sy = 0;
+  let last = null, t0 = 0, moved = 0, maxF = 0, ax = 0, ay = 0, sy = 0;
   const pt = (e) => { let x = 0, y = 0; for (const t of e.touches) { x += t.clientX; y += t.clientY; } return { x: x / e.touches.length, y: y / e.touches.length }; };
   setInterval(() => {
     if (ax || ay) { send({ type: 'move', dx: ax, dy: ay }); ax = ay = 0; }
     if (sy) { send({ type: 'scroll', dy: sy }); sy = 0; }
   }, 30);
-  pad.addEventListener('touchstart', (e) => { e.preventDefault(); if (!last) { t0 = Date.now(); moved = 0; maxFingers = 0; } maxFingers = Math.max(maxFingers, e.touches.length); last = pt(e); }, { passive: false });
+  pad.addEventListener('touchstart', (e) => { e.preventDefault(); if (!last) { t0 = Date.now(); moved = 0; maxF = 0; } maxF = Math.max(maxF, e.touches.length); last = pt(e); pad.classList.add('press'); }, { passive: false });
   pad.addEventListener('touchmove', (e) => {
-    e.preventDefault(); const p = pt(e); const dx = p.x - last.x, dy = p.y - last.y; last = p; moved += Math.abs(dx) + Math.abs(dy);
-    if (e.touches.length >= 2) sy += -dy * 3; else { ax += dx * 2.4; ay += dy * 2.4; }
+    e.preventDefault(); const p = pt(e), dx = p.x - last.x, dy = p.y - last.y; last = p; moved += Math.abs(dx) + Math.abs(dy);
+    if (e.touches.length >= 2) sy += -dy * 3; else { ax += dx * 2.4 * speedMul; ay += dy * 2.4 * speedMul; }
   }, { passive: false });
   pad.addEventListener('touchend', (e) => {
     e.preventDefault();
     if (e.touches.length) { last = pt(e); return; }
-    if (moved < 12 && Date.now() - t0 < 350 && maxFingers === 1) send({ type: 'click' });
+    pad.classList.remove('press');
+    if (moved < 12 && Date.now() - t0 < 350 && maxF === 1) { send({ type: 'click' }); if (navigator.vibrate) navigator.vibrate(8); }
     last = null;
   }, { passive: false });
 })();
 
-// ---- Botones ----
+// ---------- Botones ----------
 $$('[data-nav]').forEach((b) => b.onclick = () => send({ type: 'nav', action: b.dataset.nav }));
+$$('[data-pp]').forEach((b) => b.onclick = () => send({ type: 'media', action: 'toggle' }));
 $$('[data-seek]').forEach((b) => b.onclick = () => send({ type: 'media', action: 'seek', value: Number(b.dataset.seek) }));
 $$('[data-speed]').forEach((b) => b.onclick = () => send({ type: 'media', action: 'speed', value: Number(b.dataset.speed) }));
 $$('[data-vol]').forEach((b) => b.onclick = () => send({ type: 'volume', dir: b.dataset.vol }));
 $$('[data-key]').forEach((b) => b.onclick = () => send({ type: 'key', key: b.dataset.key }));
-$('#pp').onclick = () => send({ type: 'media', action: 'toggle' });
-$('#mute').onclick = () => send({ type: 'media', action: 'mute' });
-$('#fs').onclick = () => send({ type: 'media', action: 'fullscreen' });
-$('#sendtxt').onclick = () => { const t = $('#txt').value; if (t) { send({ type: 'text', text: t }); $('#txt').value = ''; } };
-$('#desk').onclick = () => { desktop = !desktop; $('#desk').textContent = 'Modo escritorio: ' + (desktop ? 'sí' : 'no'); send({ type: 'ua', desktop }); };
-$('#addcur').onclick = () => { if (state.url) { send({ type: 'lib:add', title: state.title || state.url, url: state.url }); toast('Guardada en la biblioteca'); } };
+$('#muteBtn').onclick = () => send({ type: 'media', action: 'mute' });
+$('#fsBtn').onclick = () => send({ type: 'media', action: 'fullscreen' });
 
+// Teclado
+$('#kbBtn').onclick = () => { $('#sheet').classList.add('on'); $('#kbText').focus(); };
+$('#kbClose').onclick = () => $('#sheet').classList.remove('on');
+$('#sheet').addEventListener('click', (e) => { if (e.target.id === 'sheet') $('#sheet').classList.remove('on'); });
+$('#kbForm').addEventListener('submit', (e) => { e.preventDefault(); const t = $('#kbText').value; if (t) { send({ type: 'text', text: t }); $('#kbText').value = ''; } });
+
+// Tocar la imagen en vivo = clic en ese punto de la TV
+$('#frame').addEventListener('click', (e) => {
+  const r = e.target.getBoundingClientRect(), iw = e.target.naturalWidth, ih = e.target.naturalHeight;
+  if (!iw) return;
+  const s = Math.min(r.width / iw, r.height / ih), w = iw * s, h = ih * s, ox = (r.width - w) / 2, oy = (r.height - h) / 2;
+  const x = (e.clientX - r.left - ox) / w, y = (e.clientY - r.top - oy) / h;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return;
+  send({ type: 'tap', x, y }); toast('CLIC ENVIADO');
+});
+
+// Barra de progreso tipo "ticks"
+const TICKS = 40;
+(() => { const t = $('#ticks'); for (let i = 0; i < TICKS; i++) { const s = document.createElement('span'); if (i % 5 === 0) s.className = 'big'; t.insertBefore(s, $('#seek')); } })();
 const seek = $('#seek');
-seek.addEventListener('input', () => { seeking = true; $('#tpos').textContent = fmt(seek.value); });
-seek.addEventListener('change', () => { send({ type: 'media', action: 'seekto', value: Number(seek.value) }); setTimeout(() => seeking = false, 600); });
+seek.addEventListener('input', () => { seeking = true; paintTicks(seek.value / (seek.max || 1)); $('#tc').firstChild.nodeValue = fmt(seek.value); });
+seek.addEventListener('change', () => { send({ type: 'media', action: 'seekto', value: Number(seek.value) }); setTimeout(() => seeking = false, 800); });
+function paintTicks(f) { const n = Math.round(f * TICKS); $$('#ticks span').forEach((s, i) => s.classList.toggle('f', i < n)); }
 
+// ---------- Gestos (modo reproducción) ----------
+(() => {
+  const g = $('#gest'), fb = $('#gfb');
+  let x0 = 0, y0 = 0, lastTap = 0, tapTimer = null;
+  const show = (t) => { fb.textContent = t; fb.style.display = 'flex'; };
+  const hide = () => setTimeout(() => fb.style.display = 'none', 450);
+  g.addEventListener('touchstart', (e) => { e.preventDefault(); x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: false });
+  g.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 14) { const s = Math.round(dx / 8); show((s > 0 ? '+' : '') + s + ' S'); }
+    else if (Math.abs(dy) > 14) { const v = Math.round(-dy / 40); show('VOL ' + (v > 0 ? '+' : '') + v); }
+  }, { passive: false });
+  g.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+    if (Math.abs(dx) < 14 && Math.abs(dy) < 14) {
+      const now = Date.now();
+      if (now - lastTap < 300) {
+        clearTimeout(tapTimer); lastTap = 0;
+        const r = g.getBoundingClientRect(), right = t.clientX > r.left + r.width / 2;
+        send({ type: 'media', action: 'seek', value: right ? 10 : -10 }); show(right ? '+10 S' : '−10 S'); hide();
+      } else {
+        lastTap = now;
+        tapTimer = setTimeout(() => { send({ type: 'media', action: 'toggle' }); show(state.paused ? '▶' : '❚❚'); hide(); }, 300);
+      }
+      return;
+    }
+    if (Math.abs(dx) > Math.abs(dy)) {
+      const s = Math.round(dx / 8); if (s) send({ type: 'media', action: 'seek', value: s });
+    } else {
+      const v = Math.round(-dy / 40);
+      for (let i = 0; i < Math.min(Math.abs(v), 10); i++) send({ type: 'volume', dir: v > 0 ? 'up' : 'down' });
+    }
+    if (navigator.vibrate) navigator.vibrate(10);
+    hide();
+  }, { passive: false });
+})();
+
+// ---------- Estado de la TV ----------
 function renderState() {
   const s = state || {};
-  $('#info').innerHTML = s.url ? `<b>${esc(s.title || '')}</b><br>${esc(s.url)}${s.has ? `<br>${s.paused ? '⏸' : '▶'} ${fmt(s.pos)} / ${fmt(s.dur)}` : ''}` : 'Sin datos de la TV';
-  if (!seeking) { seek.max = Math.max(1, Math.floor(s.dur || 0)); seek.value = Math.floor(s.pos || 0); $('#tpos').textContent = fmt(s.pos); }
-  $('#tdur').textContent = fmt(s.dur);
-  $('#pp').textContent = s.has && !s.paused ? '⏸' : '▶';
+  if (!ws || ws.readyState !== 1) setStatus('bad'); else setStatus(tvOnline ? 'on' : 'tvoff');
+  const playing = !!(s.has && !s.paused);
+  const label = s.url ? (s.title || host(s.url)) : (tvOnline ? 'PANTALLA DE INICIO' : '—');
+  $('#lcdTitle').textContent = (playing ? '▶ ' : s.has ? '❚❚ ' : '') + label;
+  $('#vTitle').textContent = label;
+  const f = s.dur ? s.pos / s.dur : 0;
+  $('#lBar').style.width = (f * 100) + '%';
+  $('#lPos').textContent = fmt(s.pos); $('#lDur').textContent = fmt(s.dur);
+  $$('.ppIcon').forEach((i) => i.innerHTML = playing ? PAUSE : PLAY);
+  $('#vState').textContent = playing ? '● REPRODUCIENDO' : s.has ? '● EN PAUSA' : '● SIN VIDEO';
+  $('#vState').classList.toggle('on', playing);
+  $('#liveDot').classList.toggle('on', playing);
+  $('#vRate').textContent = (s.rate || 1) + '×';
+  $$('[data-speed]').forEach((b) => b.classList.toggle('a', Number(b.dataset.speed) === (s.rate || 1)));
+  if (!seeking) {
+    seek.max = Math.max(1, Math.floor(s.dur || 0)); seek.value = Math.floor(s.pos || 0); paintTicks(f);
+    $('#tc').innerHTML = fmt(s.pos) + '<small>/ ' + fmt(s.dur) + '</small>';
+  }
+  // Modo reproducción: si empieza un video mientras estás en el mando, salta a VIDEO
+  if (playing && !wasPlaying && tab === 't-remote') go('t-video');
+  wasPlaying = playing;
+  // Ajustes que reporta la TV
+  const st = s.settings;
+  if (st) {
+    $$('[data-set]').forEach((b) => b.setAttribute('aria-pressed', String(!!st[b.dataset.set])));
+    if (document.activeElement !== $('#curSize')) { $('#curSize').value = st.cursor; sizeLabel(); }
+  }
 }
 
-// ---- Biblioteca ----
+// ---------- Ajustes ----------
+$$('[data-set]').forEach((b) => b.onclick = () => {
+  if (!tvOnline) return toast('LA TV ESTÁ DESCONECTADA');
+  const on = b.getAttribute('aria-pressed') !== 'true';
+  b.setAttribute('aria-pressed', String(on));
+  send({ type: 'settings', [b.dataset.set]: on });
+});
+function sizeLabel() { const v = Number($('#curSize').value); $('#curSizeV').textContent = v < 0.75 ? 'S' : v < 1.1 ? 'M' : v < 1.45 ? 'L' : 'XL'; }
+$('#curSize').addEventListener('input', sizeLabel);
+$('#curSize').addEventListener('change', () => send({ type: 'settings', cursor: Number($('#curSize').value) }));
+$('#curSpeed').value = speedMul; $('#curSpeedV').textContent = speedMul.toFixed(1) + '×';
+$('#curSpeed').addEventListener('input', () => { speedMul = Number($('#curSpeed').value); $('#curSpeedV').textContent = speedMul.toFixed(1) + '×'; store.set('speed', speedMul); });
+$('#srvHost').textContent = location.host;
+$('#logout').onclick = () => { store.del('tok'); token = ''; if (ws) { ws.onclose = null; ws.close(); } showLogin(); };
+
+// ---------- Lista ----------
 function renderLib() {
-  $('#list').innerHTML = lib.length ? '' : '<p style="color:var(--mut)">Aún no hay clases guardadas.</p>';
+  $('#libCount').textContent = lib.length + (lib.length === 1 ? ' ENLACE' : ' ENLACES');
+  const L = $('#list'); L.innerHTML = '';
+  if (!lib.length) { L.innerHTML = '<div class="empty-list">Aún no hay enlaces guardados.</div>'; return; }
   lib.forEach((i) => {
     const d = document.createElement('div'); d.className = 'item';
-    d.innerHTML = `<button class="t">${esc(i.title)}<small>${esc(i.url)}</small></button><button class="x" aria-label="Borrar">✕</button>`;
-    d.querySelector('.t').onclick = () => openUrl(i.url);
-    d.querySelector('.x').onclick = () => { if (confirm('¿Borrar "' + i.title + '"?')) send({ type: 'lib:del', id: i.id }); };
-    $('#list').appendChild(d);
+    d.innerHTML = `<button class="open"><span class="ini">${esc((i.title || '?').charAt(0).toUpperCase())}</span><span class="tx"><b>${esc(i.title)}</b><small>${esc(host(i.url))}</small></span></button><button class="del" aria-label="Borrar ${esc(i.title)}">✕</button>`;
+    d.querySelector('.open').onclick = () => openUrl(i.url);
+    d.querySelector('.del').onclick = () => { if (confirm('¿Borrar "' + i.title + '"?')) send({ type: 'lib:del', id: i.id }); };
+    L.appendChild(d);
   });
 }
-$('#ladd').onclick = () => {
-  const url = $('#lurl').value.trim(); if (!url) return;
-  send({ type: 'lib:add', title: $('#ltitle').value.trim() || url, url });
-  $('#ltitle').value = $('#lurl').value = '';
+$('#lAdd').onclick = () => {
+  const url = $('#lUrl').value.trim(); if (!url) return;
+  send({ type: 'lib:add', title: $('#lTitle').value.trim() || url, url });
+  $('#lTitle').value = $('#lUrl').value = ''; toast('GUARDADO');
+};
+$('#saveCur').onclick = () => {
+  if (!state.url) return toast('NO HAY PÁGINA ABIERTA');
+  send({ type: 'lib:add', title: state.title || state.url, url: state.url }); toast('GUARDADO EN LA LISTA');
 };
 
-// ---- "Compartir → TV Control" (PWA instalada) ----
+// ---------- "Compartir → TV Control" ----------
 (() => {
   const p = new URLSearchParams(location.search);
   const raw = [p.get('url'), p.get('text'), p.get('title')].filter(Boolean).join(' ');
   const m = raw.match(/https?:\/\/\S+/);
-  if (m) { pending = { type: 'open', url: m[0] }; history.replaceState(null, '', '/'); toast('Enviando a la TV…'); }
+  if (m) { pending = { type: 'open', url: m[0] }; history.replaceState(null, '', '/'); toast('ENVIANDO A LA TV…'); }
 })();
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
